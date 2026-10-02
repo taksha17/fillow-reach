@@ -10,6 +10,7 @@ import { importConnectionsCsv } from "./import-connections.mjs";
 import { addSuppression, forgetPerson } from "./people.mjs";
 import { run as runContacts } from "../../agents/reach-contacts.mjs";
 import { startReachUi } from "./ui.mjs";
+import { reportDate, buildDailyReport, renderReportText, sendDailyReport } from "./report.mjs";
 
 // Commands registered by later tasks (import/suppress/forget/...) append a row
 // here: { name, summary, run(args, ctx) }. ctx = { cfg, openDb, out }.
@@ -26,13 +27,13 @@ export const commands = [
   { name: "suppress", summary: "add email, LinkedIn URL, or domain to do-not-contact", run: suppressCmd },
   { name: "forget", summary: "erase a person and cascade derived rows", run: forgetCmd },
   { name: "ui", summary: "local dashboard on 127.0.0.1:4181", run: uiCmd },
+  { name: "report", summary: "build the daily digest (--send to email it)", run: reportCmd },
 ];
 
 // Planned but unregistered: shown in help so the surface is discoverable.
 const PLANNED = [
   { name: "send", summary: "(M3+) run one outreach batch (respects caps + PAUSE)" },
   { name: "approve", summary: "(M2+) review drafts" },
-  { name: "report", summary: "(M2+) daily digest" },
 ];
 
 function usageText() {
@@ -184,6 +185,19 @@ async function uiCmd(args, ctx) {
   if (args.includes("--json")) out(JSON.stringify({ url, port }));
   else out(url);
   await new Promise((resolve) => server.on("close", resolve));
+  return 0;
+}
+
+async function reportCmd(args, ctx) {
+  const { cfg, out } = ctx;
+  const db = ctx.openDb();
+  const date = reportDate(new Date(), cfg.report.timezone);
+  const built = buildDailyReport(db, cfg, { date });
+  out(renderReportText(built));
+  if (args.includes("--send")) {
+    const r = await sendDailyReport(db, cfg, { now: new Date(), dryRun: cfg.dryRun });
+    out(r.status === "sent" ? `sent report ${r.date}` : `dry-run: report built, not sent (${r.date})`);
+  }
   return 0;
 }
 
