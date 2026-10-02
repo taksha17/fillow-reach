@@ -1,27 +1,22 @@
-# TASK — M1 R2 Contacts
+# TASK — M5 optional (bsk, approval ramp, health apply)
 
-You are implementing **only M1**. Do not start M2–M5. Do not recreate the CLI.
+You are implementing **only M5**. Defaults must stay `send_mode: queue` and `approval_mode: review`. No anti-bot evasion.
 
-**Full plan:** `fillow-reach/docs/plans/2026-10-02-fillow-reach-m1.md`
-**Spec:** `fillow-reach/fillow Reach — PRD & Data Schema.md` §5 R2, §6, §8, §9, §14 M1
-**Index:** `fillow-reach/docs/plans/README.md`
+**Full plan:** `fillow-reach/docs/plans/2026-10-02-fillow-reach-m5.md`
+**Spec:** PRD R1-6/R1-7, R3-7, §7 health guard, §14 M5
 
 ## Done when
 
-- Sample Connections.csv imports (`already_connected` / `lifecycle=connected`)
-- Mailbox fixture flips `connection.status` to `accepted`
-- Hunter find+verify behind quota/cache; 401/402/429 skip the provider for the run
-- Suppression beats every other rule; `forget` + `purgeExpired` work
+- bsk path requires `data/reach/BSK_ACK`; warning/captcha → PAUSE
+- `sample` / `auto` after N clean approvals; grounding failure demotes (event, do not rewrite profile.yaml)
+- `healthGuard.halfTargets` / `emailPaused` applied at send time
 
 ## Tasks (TDD)
 
-1. `lib/reach/people.mjs` — upsertCompany, upsertPerson, isSuppressed, addSuppression, insertEmailAddress
-2. `lib/reach/import-connections.mjs` — CSV + CLI `import` (`--yes` to write)
-3. `lib/reach/acceptance.mjs` — acceptances + bounces, injectable fetcher
-4. Hunter + provider-usage
-5. CLI `contacts` / `suppress` / `forget` + `agents/reach-contacts.mjs`
-
-**Append** rows to existing `fillow-reach/lib/reach/cli.mjs` `commands`. Remove those names from `PLANNED`.
+1. bsk-send + auto-pause (injectable bskImpl)
+2. approval-ramp
+3. assertSendAllowedHealthy
+4. doctor warn rows for bsk ack / binary
 
 ## Test
 
