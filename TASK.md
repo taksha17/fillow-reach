@@ -1,27 +1,22 @@
-# TASK — M1 R2 Contacts
+# TASK — M4 R4 Report + dashboard
 
-You are implementing **only M1**. Do not start M2–M5. Do not recreate the CLI.
+You are implementing **only M4**. Do not edit parent fillow `job-ui.mjs`. Standalone UI on 127.0.0.1:4181.
 
-**Full plan:** `fillow-reach/docs/plans/2026-10-02-fillow-reach-m1.md`
-**Spec:** `fillow-reach/fillow Reach — PRD & Data Schema.md` §5 R2, §6, §8, §9, §14 M1
-**Index:** `fillow-reach/docs/plans/README.md`
+**Full plan:** `fillow-reach/docs/plans/2026-10-02-fillow-reach-m4.md`
+**Spec:** PRD §5 R4, §6 JSONL, §9 dashboard views, §14 M4
 
 ## Done when
 
-- Sample Connections.csv imports (`already_connected` / `lifecycle=connected`)
-- Mailbox fixture flips `connection.status` to `accepted`
-- Hunter find+verify behind quota/cache; 401/402/429 skip the provider for the run
-- Suppression beats every other rule; `forget` + `purgeExpired` work
+- Dashboard: funnel, today’s queue, approvals, people timeline, usage vs caps, health, errors
+- Mark-sent sets `sent_via='manual'`
+- Daily report builder + optional `--send`
+- Append-only `data/reach/events-YYYYMMDD.jsonl`
 
 ## Tasks (TDD)
 
-1. `lib/reach/people.mjs` — upsertCompany, upsertPerson, isSuppressed, addSuppression, insertEmailAddress
-2. `lib/reach/import-connections.mjs` — CSV + CLI `import` (`--yes` to write)
-3. `lib/reach/acceptance.mjs` — acceptances + bounces, injectable fetcher
-4. Hunter + provider-usage
-5. CLI `contacts` / `suppress` / `forget` + `agents/reach-contacts.mjs`
-
-**Append** rows to existing `fillow-reach/lib/reach/cli.mjs` `commands`. Remove those names from `PLANNED`.
+1. dashboard-data + ui + `reach ui` + markInviteSent
+2. buildDailyReport + `reach report` / `--send`
+3. exportEventsJsonl (append new ids only)
 
 ## Test
 
@@ -29,5 +24,3 @@ You are implementing **only M1**. Do not start M2–M5. Do not recreate the CLI.
 cd fillow-reach
 node --disable-warning=ExperimentalWarning --test tests/*.mjs
 ```
-
-Never `npm test`. Fake identities only. All new files under `fillow-reach/`.
