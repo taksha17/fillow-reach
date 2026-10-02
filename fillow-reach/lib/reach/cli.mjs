@@ -9,6 +9,7 @@ import { setupMain } from "./setup.mjs";
 import { importConnectionsCsv } from "./import-connections.mjs";
 import { addSuppression, forgetPerson } from "./people.mjs";
 import { run as runContacts } from "../../agents/reach-contacts.mjs";
+import { startReachUi } from "./ui.mjs";
 
 // Commands registered by later tasks (import/suppress/forget/...) append a row
 // here: { name, summary, run(args, ctx) }. ctx = { cfg, openDb, out }.
@@ -24,6 +25,7 @@ export const commands = [
   { name: "contacts", summary: "detect acceptances/bounces and enrich emails", run: contactsCmd },
   { name: "suppress", summary: "add email, LinkedIn URL, or domain to do-not-contact", run: suppressCmd },
   { name: "forget", summary: "erase a person and cascade derived rows", run: forgetCmd },
+  { name: "ui", summary: "local dashboard on 127.0.0.1:4181", run: uiCmd },
 ];
 
 // Planned but unregistered: shown in help so the surface is discoverable.
@@ -173,6 +175,15 @@ async function contactsCmd(_args, ctx) {
   if (!cfg.mail.configured) out("mailbox skipped");
   const stats = await runContacts(cfg);
   out(`contacts: accepted ${stats.accepted} unmatched ${stats.unmatched} hard ${stats.hard} soft ${stats.soft} enriched ${stats.enriched}`);
+  return 0;
+}
+
+async function uiCmd(args, ctx) {
+  const { cfg, out } = ctx;
+  const { url, port, server } = await startReachUi(cfg, { host: "127.0.0.1", port: 4181 });
+  if (args.includes("--json")) out(JSON.stringify({ url, port }));
+  else out(url);
+  await new Promise((resolve) => server.on("close", resolve));
   return 0;
 }
 
