@@ -1,5 +1,6 @@
 import { openReachMigratedDb } from "../lib/reach/db.mjs";
 import { reportDate, buildDailyReport, renderReportText, sendDailyReport } from "../lib/reach/report.mjs";
+import { exportEventsJsonl } from "../lib/reach/export-jsonl.mjs";
 
 export async function run(cfg, { emit = () => {}, sendMailImpl, now, send = false } = {}) {
   emit("phase.start", { agent: "report" });
@@ -13,7 +14,9 @@ export async function run(cfg, { emit = () => {}, sendMailImpl, now, send = fals
     if (send) {
       sent = await sendDailyReport(db, cfg, { sendMailImpl, now: when, dryRun: cfg.dryRun });
     }
-    const out = { date, rows: built.rows.length, text, status: sent.status };
+    const utcDate = reportDate(when, "UTC");
+    const exported = exportEventsJsonl(db, cfg, { date: utcDate });
+    const out = { date, rows: built.rows.length, text, status: sent.status, exported };
     emit("phase.complete", out);
     return out;
   } finally {
