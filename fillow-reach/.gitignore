@@ -1,0 +1,14 @@
+# fillow-reach — local artifacts only; source files stay tracked.
+node_modules/
+coverage/
+*.log
+.DS_Store
+
+# Editor dirs
+.vscode/
+.idea/
+.qwen/
+
+# Local secrets
+.env
+.env.local

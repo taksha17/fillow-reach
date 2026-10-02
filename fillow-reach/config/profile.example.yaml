@@ -1,0 +1,36 @@
+# fillow Reach config — append this block to the fillow root config/profile.yaml
+# (or run `fillow-reach setup`, which writes it for you). Generic template only:
+# credentials come from .env, never from this file.
+reach:
+  enabled: true
+  dry_run: true                 # env REACH_DRY_RUN; nothing is sent while true
+  approval_mode: review         # review | sample | auto
+  min_relevance: 70
+  personas: [recruiter, hiring_manager, senior_ic]
+  limits:
+    invites_per_day: 15
+    invites_per_7d: 75
+    linkedin_messages_per_7d: 75
+    emails_per_day: 15
+    pace_seconds: [45, 180]
+    working_hours: "08:00-18:00"
+  linkedin:
+    send_mode: queue            # queue | bsk
+    invite_note: false          # invites are sent blank
+  mail:                         # the user's own mailbox; set by `fillow reach setup`
+    preset: gmail               # gmail | custom
+    imap: { host: imap.gmail.com, port: 993 }
+    smtp: { host: smtp.gmail.com, port: 465 }
+    # credentials come from .env, never from this file
+  email:
+    delay_days: 2
+    followup_days: 7
+    attach_resume: followup     # first | followup | never
+    require_verified: true
+    optout_line: "If you'd rather not hear from me, reply 'stop' and I won't write again."
+  enrichment:
+    order: [pattern, hunter, apollo]          # pattern = free built-in step
+    monthly_quota: { hunter: 0, apollo: 0 }   # 0 = provider disabled; set from YOUR plan
+  health: { min_acceptance: 0.25, max_bounce: 0.03 }
+  retention_days: 180
+  report: { time: "18:30", timezone: "America/Chicago", attach_resumes: true }

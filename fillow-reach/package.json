@@ -1,0 +1,35 @@
+{
+  "name": "fillow-reach",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "fillow Reach — recruiter outreach agent family (schema, caps, kill switch, setup/doctor/status)",
+  "bin": {
+    "fillow-reach": "./bin/reach.mjs"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "reach": "node bin/reach.mjs",
+    "lint": "node ../scripts/check-syntax.mjs",
+    "test": "node --disable-warning=ExperimentalWarning --test tests/*.mjs",
+    "setup": "node bin/reach.mjs setup",
+    "doctor": "node bin/reach.mjs doctor",
+    "status": "node bin/reach.mjs status"
+  },
+  "keywords": [
+    "fillow",
+    "outreach",
+    "recruiting",
+    "linkedin",
+    "sqlite"
+  ],
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "dotenv": "^16.4.5",
+    "js-yaml": "^4.1.0",
+    "nodemailer": "^7.0.13"
+  }
+}
