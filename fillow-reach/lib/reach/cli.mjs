@@ -1,9 +1,14 @@
+import { readFileSync } from "node:fs";
+
 import { loadReachConfig } from "./config.mjs";
 import { openReachMigratedDb, recordEvent } from "./db.mjs";
 import { isPaused, pause, resume } from "./killswitch.mjs";
 import { collectStatus, renderStatus, statusJson, runMigrations } from "./status.mjs";
 import { doctorMain } from "./doctor.mjs";
 import { setupMain } from "./setup.mjs";
+import { importConnectionsCsv } from "./import-connections.mjs";
+import { addSuppression, forgetPerson } from "./people.mjs";
+import { run as runContacts } from "../../agents/reach-contacts.mjs";
 
 // Commands registered by later tasks (import/suppress/forget/...) append a row
 // here: { name, summary, run(args, ctx) }. ctx = { cfg, openDb, out }.
@@ -15,13 +20,14 @@ export const commands = [
   { name: "pause", summary: "halt all sends — drop a PAUSE kill-switch file", run: pauseCmd },
   { name: "resume", summary: "remove the PAUSE kill-switch file", run: resumeCmd },
   { name: "migrate", summary: "apply pending sqlite migrations", run: migrateCmd },
+  { name: "import", summary: "parse LinkedIn Connections.csv (review-first; --yes to write)", run: importCmd },
+  { name: "contacts", summary: "detect acceptances/bounces and enrich emails", run: contactsCmd },
+  { name: "suppress", summary: "add email, LinkedIn URL, or domain to do-not-contact", run: suppressCmd },
+  { name: "forget", summary: "erase a person and cascade derived rows", run: forgetCmd },
 ];
 
 // Planned but unregistered: shown in help so the surface is discoverable.
 const PLANNED = [
-  { name: "import", summary: "(M1+) parse pasted search results / LinkedIn CSV" },
-  { name: "suppress", summary: "(M1+) add a person/domain to the suppression list" },
-  { name: "forget", summary: "(M1+) erase a person and all derived data" },
   { name: "send", summary: "(M3+) run one outreach batch (respects caps + PAUSE)" },
   { name: "approve", summary: "(M2+) review drafts" },
   { name: "report", summary: "(M2+) daily digest" },
@@ -108,6 +114,65 @@ async function resumeCmd(_args, ctx) {
     recordEvent(ctx.openDb(), { agent: "cli", entity: "system", action: "resume", detail: { was } });
   } catch { /* audit trail is best-effort */ }
   out(was ? "resumed — PAUSE removed." : "resumed — no PAUSE file was present.");
+  return 0;
+}
+
+async function importCmd(args, ctx) {
+  const { out } = ctx;
+  const apply = args.includes("--yes");
+  const path = args.filter((a) => a !== "--yes").at(-1);
+  if (!path) {
+    out("usage: reach import [--yes] <connections.csv>");
+    return 1;
+  }
+  const csvText = readFileSync(path, "utf8");
+  const db = ctx.openDb();
+  const r = importConnectionsCsv(db, csvText, { apply });
+  if (!apply) {
+    for (const row of r.preview) {
+      out(`${row.full_name} — ${row.title} @ ${row.company} ${row.linkedin_url}`);
+    }
+    out(`parsed ${r.parsed}, not written (pass --yes)`);
+    return 0;
+  }
+  out(`imported ${r.imported}, skipped ${r.skipped} of ${r.parsed}`);
+  return 0;
+}
+
+function suppressKind(value) {
+  if (value.includes("@")) return "email";
+  if (/linkedin\./i.test(value)) return "linkedin_url";
+  return "domain";
+}
+
+async function suppressCmd(args, ctx) {
+  const value = args[0];
+  if (!value) {
+    ctx.out("usage: reach suppress <email|linkedin-url|domain>");
+    return 1;
+  }
+  const kind = suppressKind(value);
+  addSuppression(ctx.openDb(), { kind, value, reason: "manual" });
+  ctx.out(`suppressed ${kind} ${value}`);
+  return 0;
+}
+
+async function forgetCmd(args, ctx) {
+  const id = Number.parseInt(args[0], 10);
+  if (!Number.isInteger(id)) {
+    ctx.out("usage: reach forget <person-id>");
+    return 1;
+  }
+  const r = forgetPerson(ctx.openDb(), id);
+  ctx.out(r.ok ? `forgot person ${id}` : `no person ${id}`);
+  return r.ok ? 0 : 1;
+}
+
+async function contactsCmd(_args, ctx) {
+  const { cfg, out } = ctx;
+  if (!cfg.mail.configured) out("mailbox skipped");
+  const stats = await runContacts(cfg);
+  out(`contacts: accepted ${stats.accepted} unmatched ${stats.unmatched} hard ${stats.hard} soft ${stats.soft} enriched ${stats.enriched}`);
   return 0;
 }
 

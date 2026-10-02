@@ -33,7 +33,7 @@ test("1. empty argv prints usage with all planned commands, exits 1", async () =
   const fx = fixture();
   const { code, out } = await run([], fx);
   assert.equal(code, 1);
-  for (const line of ["reach status", "reach doctor", "reach import", "reach suppress", "reach forget", "reach pause", "reach resume"]) {
+  for (const line of ["reach status", "reach doctor", "reach import", "reach contacts", "reach suppress", "reach forget", "reach pause", "reach resume"]) {
     assert.ok(out.includes(line), `usage should mention "${line}"`);
   }
 });
@@ -89,4 +89,19 @@ test("7. doctor reports invalid reach block, exits 1", async () => {
   const { code, out } = await run(["doctor"], fx);
   assert.equal(code, 1);
   assert.ok(/approval_mode/.test(out));
+});
+
+test("8. contacts without mailbox prints skipped, exit 0", async () => {
+  const fx = fixture("reach:\n  enabled: true\n");
+  const { code, out } = await run(["contacts"], fx);
+  assert.equal(code, 0, out);
+  assert.match(out, /mailbox skipped/);
+  assert.match(out, /contacts:/);
+});
+
+test("9. forget without an id prints usage, exit 1", async () => {
+  const fx = fixture();
+  const { code, out } = await run(["forget"], fx);
+  assert.equal(code, 1);
+  assert.match(out, /usage: reach forget/);
 });
