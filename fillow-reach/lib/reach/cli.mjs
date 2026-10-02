@@ -1,9 +1,12 @@
+import { readFileSync } from "node:fs";
+
 import { loadReachConfig } from "./config.mjs";
 import { openReachMigratedDb, recordEvent } from "./db.mjs";
 import { isPaused, pause, resume } from "./killswitch.mjs";
 import { collectStatus, renderStatus, statusJson, runMigrations } from "./status.mjs";
 import { doctorMain } from "./doctor.mjs";
 import { setupMain } from "./setup.mjs";
+import { importConnectionsCsv } from "./import-connections.mjs";
 
 // Commands registered by later tasks (import/suppress/forget/...) append a row
 // here: { name, summary, run(args, ctx) }. ctx = { cfg, openDb, out }.
@@ -15,11 +18,11 @@ export const commands = [
   { name: "pause", summary: "halt all sends — drop a PAUSE kill-switch file", run: pauseCmd },
   { name: "resume", summary: "remove the PAUSE kill-switch file", run: resumeCmd },
   { name: "migrate", summary: "apply pending sqlite migrations", run: migrateCmd },
+  { name: "import", summary: "parse LinkedIn Connections.csv (review-first; --yes to write)", run: importCmd },
 ];
 
 // Planned but unregistered: shown in help so the surface is discoverable.
 const PLANNED = [
-  { name: "import", summary: "(M1+) parse pasted search results / LinkedIn CSV" },
   { name: "suppress", summary: "(M1+) add a person/domain to the suppression list" },
   { name: "forget", summary: "(M1+) erase a person and all derived data" },
   { name: "send", summary: "(M3+) run one outreach batch (respects caps + PAUSE)" },
@@ -108,6 +111,28 @@ async function resumeCmd(_args, ctx) {
     recordEvent(ctx.openDb(), { agent: "cli", entity: "system", action: "resume", detail: { was } });
   } catch { /* audit trail is best-effort */ }
   out(was ? "resumed — PAUSE removed." : "resumed — no PAUSE file was present.");
+  return 0;
+}
+
+async function importCmd(args, ctx) {
+  const { out } = ctx;
+  const apply = args.includes("--yes");
+  const path = args.filter((a) => a !== "--yes").at(-1);
+  if (!path) {
+    out("usage: reach import [--yes] <connections.csv>");
+    return 1;
+  }
+  const csvText = readFileSync(path, "utf8");
+  const db = ctx.openDb();
+  const r = importConnectionsCsv(db, csvText, { apply });
+  if (!apply) {
+    for (const row of r.preview) {
+      out(`${row.full_name} — ${row.title} @ ${row.company} ${row.linkedin_url}`);
+    }
+    out(`parsed ${r.parsed}, not written (pass --yes)`);
+    return 0;
+  }
+  out(`imported ${r.imported}, skipped ${r.skipped} of ${r.parsed}`);
   return 0;
 }
 
