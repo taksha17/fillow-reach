@@ -4,6 +4,8 @@ import { isPaused, pause, resume } from "./killswitch.mjs";
 import { collectStatus, renderStatus, statusJson, runMigrations } from "./status.mjs";
 import { doctorMain } from "./doctor.mjs";
 import { setupMain } from "./setup.mjs";
+import { importPaste } from "./import-paste.mjs";
+import { readFileSync } from "node:fs";
 
 // Commands registered by later tasks (import/suppress/forget/...) append a row
 // here: { name, summary, run(args, ctx) }. ctx = { cfg, openDb, out }.
@@ -15,11 +17,11 @@ export const commands = [
   { name: "pause", summary: "halt all sends — drop a PAUSE kill-switch file", run: pauseCmd },
   { name: "resume", summary: "remove the PAUSE kill-switch file", run: resumeCmd },
   { name: "migrate", summary: "apply pending sqlite migrations", run: migrateCmd },
+  { name: "import", summary: "--paste text (review-first; --yes to write)", run: importCmd },
 ];
 
 // Planned but unregistered: shown in help so the surface is discoverable.
 const PLANNED = [
-  { name: "import", summary: "(M1+) parse pasted search results / LinkedIn CSV" },
   { name: "suppress", summary: "(M1+) add a person/domain to the suppression list" },
   { name: "forget", summary: "(M1+) erase a person and all derived data" },
   { name: "send", summary: "(M3+) run one outreach batch (respects caps + PAUSE)" },
@@ -87,6 +89,44 @@ async function doctorCmd(args, { out, opts }) {
 
 async function setupCmd(_args, { out, opts }) {
   return setupMain([], { out, ...opts });
+}
+
+function readStdinAll() {
+  return new Promise((resolve, reject) => {
+    if (process.stdin.isTTY) {
+      reject(new Error("no input: pipe text in or pass --file <path>"));
+      return;
+    }
+    let text = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (c) => { text += c; });
+    process.stdin.on("end", () => resolve(text));
+    process.stdin.on("error", reject);
+  });
+}
+
+async function importCmd(args, ctx) {
+  const { out, openDb } = ctx;
+  if (!args.includes("--paste")) {
+    // CSV path behavior belongs to M1 (PR #1); this branch ships paste only.
+    out("csv import ships with M1 (PR #1); this build accepts --paste only");
+    return 2;
+  }
+  const yes = args.includes("--yes");
+  const fileIdx = args.indexOf("--file");
+  const file = fileIdx !== -1 ? args[fileIdx + 1] : null;
+  const text = file ? readFileSync(file, "utf8") : await readStdinAll();
+  const db = openDb();
+  const res = importPaste(db, text, { apply: yes });
+  if (!yes) {
+    for (const row of res.preview.slice(0, 20)) {
+      out(`  ${row.full_name} · ${row.title ?? "?"}${row.company ? ` at ${row.company}` : ""}${row.linkedin_url ? ` · ${row.linkedin_url}` : ""}`);
+    }
+    out(`parsed ${res.parsed}, not written (pass --yes)`);
+    return 0;
+  }
+  out(`paste imported: ${res.imported}${res.skipped ? `, skipped ${res.skipped}` : ""}`);
+  return 0;
 }
 
 async function pauseCmd(args, ctx) {
