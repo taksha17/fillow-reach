@@ -1,10 +1,13 @@
 import { recordEvent } from "./db.mjs";
 import { pause } from "./killswitch.mjs";
 import { hasBskAck, sendLinkedinViaBsk } from "./bsk-send.mjs";
+import { assertSendAllowedHealthy } from "./health-apply.mjs";
 
 export async function sendApproved(db, reachCfg, {
   personId, channel, kind = "invite", body = "", bskImpl,
 } = {}) {
+  const action = channel === "email" ? "email" : (kind === "message" ? "linkedin_message" : "invite");
+  assertSendAllowedHealthy({ db, reachCfg, action });
   if (channel === "linkedin" && reachCfg.linkedin?.sendMode === "bsk") {
     if (!hasBskAck(reachCfg)) {
       throw new Error("acknowledgement required — run reach setup --ack-bsk");
