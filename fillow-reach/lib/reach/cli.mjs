@@ -7,6 +7,8 @@ import { collectStatus, renderStatus, statusJson, runMigrations } from "./status
 import { doctorMain } from "./doctor.mjs";
 import { setupMain } from "./setup.mjs";
 import { importConnectionsCsv } from "./import-connections.mjs";
+import { addSuppression, forgetPerson } from "./people.mjs";
+import { run as runContacts } from "../../agents/reach-contacts.mjs";
 
 // Commands registered by later tasks (import/suppress/forget/...) append a row
 // here: { name, summary, run(args, ctx) }. ctx = { cfg, openDb, out }.
@@ -19,12 +21,13 @@ export const commands = [
   { name: "resume", summary: "remove the PAUSE kill-switch file", run: resumeCmd },
   { name: "migrate", summary: "apply pending sqlite migrations", run: migrateCmd },
   { name: "import", summary: "parse LinkedIn Connections.csv (review-first; --yes to write)", run: importCmd },
+  { name: "contacts", summary: "detect acceptances/bounces and enrich emails", run: contactsCmd },
+  { name: "suppress", summary: "add email, LinkedIn URL, or domain to do-not-contact", run: suppressCmd },
+  { name: "forget", summary: "erase a person and cascade derived rows", run: forgetCmd },
 ];
 
 // Planned but unregistered: shown in help so the surface is discoverable.
 const PLANNED = [
-  { name: "suppress", summary: "(M1+) add a person/domain to the suppression list" },
-  { name: "forget", summary: "(M1+) erase a person and all derived data" },
   { name: "send", summary: "(M3+) run one outreach batch (respects caps + PAUSE)" },
   { name: "approve", summary: "(M2+) review drafts" },
   { name: "report", summary: "(M2+) daily digest" },
@@ -133,6 +136,43 @@ async function importCmd(args, ctx) {
     return 0;
   }
   out(`imported ${r.imported}, skipped ${r.skipped} of ${r.parsed}`);
+  return 0;
+}
+
+function suppressKind(value) {
+  if (value.includes("@")) return "email";
+  if (/linkedin\./i.test(value)) return "linkedin_url";
+  return "domain";
+}
+
+async function suppressCmd(args, ctx) {
+  const value = args[0];
+  if (!value) {
+    ctx.out("usage: reach suppress <email|linkedin-url|domain>");
+    return 1;
+  }
+  const kind = suppressKind(value);
+  addSuppression(ctx.openDb(), { kind, value, reason: "manual" });
+  ctx.out(`suppressed ${kind} ${value}`);
+  return 0;
+}
+
+async function forgetCmd(args, ctx) {
+  const id = Number.parseInt(args[0], 10);
+  if (!Number.isInteger(id)) {
+    ctx.out("usage: reach forget <person-id>");
+    return 1;
+  }
+  const r = forgetPerson(ctx.openDb(), id);
+  ctx.out(r.ok ? `forgot person ${id}` : `no person ${id}`);
+  return r.ok ? 0 : 1;
+}
+
+async function contactsCmd(_args, ctx) {
+  const { cfg, out } = ctx;
+  if (!cfg.mail.configured) out("mailbox skipped");
+  const stats = await runContacts(cfg);
+  out(`contacts: accepted ${stats.accepted} unmatched ${stats.unmatched} hard ${stats.hard} soft ${stats.soft} enriched ${stats.enriched}`);
   return 0;
 }
 

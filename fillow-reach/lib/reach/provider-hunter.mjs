@@ -70,6 +70,7 @@ export async function enrichEmail(db, reachCfg, personId, { fetchImpl = globalTh
     "INSERT INTO enrichment_cache (provider, query_key, response) VALUES ('hunter', ?, ?)",
   ).run(qk, JSON.stringify({ ...data, email, result: data.result || data.status, score: data.score }));
   incrementProviderUsage(db, "hunter");
-  insertEmailAddress(db, { person_id: personId, email, source: "hunter", confidence: data.score ?? null, verification });
+  const row = insertEmailAddress(db, { person_id: personId, email, source: "hunter", confidence: data.score ?? null, verification });
+  if (!row) return { skipped: "provider_error" };
   return { email, verification, fromCache: false };
 }

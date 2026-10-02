@@ -151,3 +151,28 @@ export function insertEmailAddress(db, { person_id, email, source, confidence = 
   recordEvent(db, { agent: "contacts", entity: "email_address", entityId: r.lastInsertRowid, action: "email_stored", detail: { created: true } });
   return { id: r.lastInsertRowid, created: true };
 }
+
+export function forgetPerson(db, personId) {
+  const id = Number(personId);
+  if (!Number.isInteger(id) || id <= 0) return { ok: false };
+  const row = db.prepare("SELECT id FROM person WHERE id = ?").get(id);
+  if (!row) return { ok: false };
+  recordEvent(db, { agent: "contacts", entity: "person", entityId: id, action: "person_forgotten", detail: { personId: id } });
+  db.prepare("UPDATE event_log SET detail = '{\"redacted\":true}' WHERE entity = 'person' AND entity_id = ?").run(id);
+  db.prepare("DELETE FROM person WHERE id = ?").run(id);
+  return { ok: true };
+}
+
+export function purgeExpired(db, retentionDays) {
+  const days = Number(retentionDays);
+  const rows = db.prepare(
+    `SELECT id FROM person
+     WHERE lifecycle IN ('closed','suppressed')
+       AND updated_at < datetime('now', '-' || ? || ' days')`,
+  ).all(days);
+  let purged = 0;
+  for (const r of rows) {
+    if (forgetPerson(db, r.id).ok) purged += 1;
+  }
+  return { purged };
+}
