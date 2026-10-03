@@ -78,7 +78,9 @@ const STOPWORDS = new Set([
   "convenience", "consider", "considers", "considered", "considering",
   "consideration", "regard", "regards", "regarding", "sincerely",
   "appreciate", "appreciated", "appreciation", "welcome", "conversation",
-  "conversations",
+  "conversations", "graduate", "graduates", "graduated", "graduation",
+  "earn", "earned", "earning", "complete", "completed", "completing",
+  "share", "shares", "shared", "sharing", "further",
 ]);
 
 const CONNECTORS = new Set(["of", "and", "the", "for", "de", "van", "at"]);
