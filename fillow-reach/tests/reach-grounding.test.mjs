@@ -8,7 +8,7 @@ import { openReachDb, migrateReachDb } from "../lib/reach/db.mjs";
 import { loadReachConfig } from "../lib/reach/config.mjs";
 import { composeDraft, buildDraftPrompt } from "../lib/reach/draft.mjs";
 import { extractClaims, groundingCheck, sanitizeUntrusted } from "../lib/reach/grounding.mjs";
-import { loadFactPack } from "../lib/reach/facts.mjs";
+import { loadFactPack, sourcesText } from "../lib/reach/facts.mjs";
 
 const RESUME = "Senior data engineer. Five years of Python ETL pipelines and dbt models at Northwind Traders.";
 
@@ -185,4 +185,37 @@ test("10. extractClaims skips greetings and function words, keeps proper nouns",
 test("11. extractClaims keeps acronyms and long content words", () => {
   const claims = extractClaims("I build Python ETL pipelines.");
   assert.deepEqual(claims, ["Python", "ETL", "pipelines"]);
+});
+
+test("9. first_name/last_name profiles still ground the composite full name", () => {
+  const dir = mkdtempSync(join(tmpdir(), "reach-grounding-"));
+  const profileFile = join(dir, "profile.yaml");
+  writeFileSync(profileFile, [
+    "candidate:",
+    "  first_name: Robin",
+    "  last_name: Vega",
+    "  current_company: Northwind Traders",
+    "reach:",
+    "  enabled: true",
+    "",
+  ].join("\n"), "utf8");
+  const cfg = loadReachConfig({ profileFile, envFile: join(dir, ".env"), dataDir: join(dir, "data") });
+  const db = openReachDb(":memory:");
+  migrateReachDb(db);
+  const pid = Number(db.prepare(
+    "INSERT INTO person (full_name, company_id, persona, source) VALUES ('Dana Ruiz', NULL, 'recruiter', 'manual')",
+  ).run().lastInsertRowid);
+  const pack = loadFactPack(db, cfg, pid);
+  const src = sourcesText(pack);
+  assert.ok(src.toLowerCase().includes("name: robin vega"), src);
+  const check = groundingCheck("Hi Dana, I'm Robin Vega and I'd welcome a conversation.", src);
+  assert.deepEqual(check.notes.filter((n) => n.includes("Robin Vega")), []);
+  db.close();
+});
+
+test("10. ordinary outreach prose is not claim-flagged (hold, based, discuss, regards, ...)", () => {
+  const src = "Dana Ruiz\nTalent Lead\nNorthwind Traders\nname: Robin Vega\nemail: robin.vega@example.com";
+  const body = "Hi Dana, I'm Robin Vega. I'm based at Northwind Traders and would love to discuss the role and view how my background aligns with your needs. Best regards, Robin Vega. Thank you for your consideration.";
+  const check = groundingCheck(body, src);
+  assert.deepEqual(check.notes, [], JSON.stringify(check.notes));
 });

@@ -70,6 +70,15 @@ const STOPWORDS = new Set([
   "learning", "learned", "study", "studies", "studying", "studied", "focus",
   "focuses", "focused", "join", "joins", "joining", "joined", "move", "moves",
   "moving", "moved", "bring", "brings", "bringing", "brought",
+  // ordinary outreach prose (trial-run gaps 2026-10-03): without these every
+  // normal sentence reads as an unverified claim and the gate is unpassable
+  "hold", "holds", "held", "base", "based", "basis", "discuss", "discusses",
+  "discussed", "discussion", "background", "align", "aligns", "aligned",
+  "alignment", "view", "views", "viewed", "viewing", "needs", "convenient",
+  "convenience", "consider", "considers", "considered", "considering",
+  "consideration", "regard", "regards", "regarding", "sincerely",
+  "appreciate", "appreciated", "appreciation", "welcome", "conversation",
+  "conversations",
 ]);
 
 const CONNECTORS = new Set(["of", "and", "the", "for", "de", "van", "at"]);

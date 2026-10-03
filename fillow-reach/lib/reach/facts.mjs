@@ -118,7 +118,14 @@ export function loadFactPack(db, reachCfg, personId) {
     : null;
   const resumeText = readResumeText(reachCfg, resumeAsset);
 
-  const candidateLines = Object.entries(candidate)
+  // The candidate's full name must exist as one traceable line: profiles that
+  // split it into first_name/last_name otherwise can never ground a two-word
+  // name claim ("Robin Vega" would span two `key: value` lines).
+  const candidateEntries = Object.entries(candidate);
+  if (!candidate.name && (candidate.first_name || candidate.last_name)) {
+    candidateEntries.unshift(["name", [candidate.first_name, candidate.last_name].filter(Boolean).join(" ")]);
+  }
+  const candidateLines = candidateEntries
     .map(([k, v]) => `${k}: ${textOf(v)}`)
     .filter((line) => !line.endsWith(": "));
 
