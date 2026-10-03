@@ -1,5 +1,11 @@
+import { existsSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
+
+import { assertSendAllowed } from "./caps.mjs";
 import { recordEvent } from "./db.mjs";
-import { toSqliteTs } from "./facts.mjs";
+import {
+  isSuppressed, loadCandidateFacts, loadPerson, outboundEmail, toSqliteTs, utcDate,
+} from "./facts.mjs";
 
 export function listPendingApproval(db) {
   return db.prepare(
@@ -61,4 +67,167 @@ export function approveAllGrounded(db, opts = {}) {
 export function preview(row) {
   const first = String(row.body ?? "").replace(/\s+/g, " ").trim();
   return first.length > 160 ? `${first.slice(0, 157)}...` : first;
+}
+
+// R3-9: never LinkedIn-message and email the same person on the same UTC day.
+export function sameDayConflict(db, personId, channel, now = new Date()) {
+  const other = channel === "linkedin" ? "email" : "linkedin";
+  return Boolean(db.prepare(
+    "SELECT 1 FROM message WHERE person_id = ? AND channel = ? AND direction = 'out'"
+    + " AND status = 'sent' AND sent_at IS NOT NULL AND substr(sent_at, 1, 10) = ? LIMIT 1",
+  ).get(personId, other, utcDate(now)));
+}
+
+export function paceDelayMs(reachCfg, rng = Math.random) {
+  const [min, max] = reachCfg.limits.paceSeconds;
+  return Math.round((min + rng() * (max - min)) * 1000);
+}
+
+// PRD §5 R3-3: the exact resume variant for that role is attached only when the
+// configured phase calls for it. `followup` (the default) means not on the
+// first cold email.
+function resumeAttachment(db, reachCfg, msg) {
+  const mode = reachCfg.email.attachResume;
+  const wanted = (mode === "followup" && msg.step === 2) || (mode === "first" && msg.step === 1);
+  if (!wanted || !msg.resume_asset_id) return null;
+  const asset = db.prepare("SELECT path FROM resume_asset WHERE id = ?").get(msg.resume_asset_id);
+  if (!asset) return null;
+  const path = isAbsolute(asset.path) ? asset.path : join(reachCfg.paths.dataDir, asset.path);
+  if (!existsSync(path)) return null;
+  return { filename: path.split(/[\\/]/).pop(), path };
+}
+
+// nodemailer is imported lazily: the test suite injects sendMailImpl and must
+// never load a transport, let alone open a socket.
+async function defaultSendMail(reachCfg) {
+  const { default: nodemailer } = await import("nodemailer");
+  if (!reachCfg.mail.configured) {
+    throw new Error("SMTP credentials missing — set REACH_MAIL_USER and REACH_MAIL_PASSWORD in .env");
+  }
+  const { host, port } = reachCfg.mail.smtp;
+  const transport = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user: reachCfg.mail.user, pass: reachCfg.mail.password },
+  });
+  return ({ from, to, subject, text, attachments }) => transport.sendMail({
+    from, to, subject, text, attachments,
+  });
+}
+
+function withOptOut(body, optoutLine) {
+  const text = String(body ?? "");
+  const line = String(optoutLine ?? "").trim();
+  if (!line || text.includes(line)) return text;
+  return `${text.replace(/\s+$/, "")}\n\n${line}`;
+}
+
+// PRD §7: the cap is checked inside the same transaction that records the send.
+// A throw here leaves the message approved/queued — over cap items roll over,
+// they never fail.
+export async function sendApproved(db, reachCfg, messageId, {
+  sendMailImpl, now = new Date(), sleepImpl, pace = true, rng = Math.random,
+  runId = null, agent = "outreach",
+} = {}) {
+  const msg = db.prepare("SELECT * FROM message WHERE id = ?").get(messageId);
+  if (!msg) throw new Error(`sendApproved: no message ${messageId}`);
+  if (msg.direction !== "out") throw new Error(`sendApproved: message ${messageId} is inbound`);
+  if (msg.status !== "approved" && msg.status !== "queued") {
+    throw new Error(`sendApproved: message ${messageId} is ${msg.status}, not approved or queued`);
+  }
+  if (msg.grounding_ok === 0) {
+    throw new Error(`sendApproved: message ${messageId} has grounding_ok=0 and can never be sent.`);
+  }
+  if (msg.grounding_ok === null) {
+    throw new Error(`sendApproved: message ${messageId} was never grounded.`);
+  }
+
+  // Drafts and approvals persist while dry; nothing is transmitted and nothing
+  // is marked sent.
+  if (reachCfg.dryRun) {
+    return { status: "dry_run", messageId, channel: msg.channel };
+  }
+
+  // Suppression is re-checked here: it outranks an approval given earlier.
+  const person = loadPerson(db, msg.person_id);
+  if (isSuppressed(db, person)) {
+    db.prepare("UPDATE message SET status = 'cancelled', error = ? WHERE id = ?")
+      .run("suppressed before send", messageId);
+    recordEvent(db, {
+      runId, agent, entity: "message", entityId: messageId, action: "send_cancelled",
+      detail: { reason: "suppressed", channel: msg.channel },
+    });
+    throw new Error(`sendApproved: person ${msg.person_id} is suppressed — message ${messageId} cancelled.`);
+  }
+
+  let to = null;
+  if (msg.channel === "email") {
+    to = outboundEmail(db, msg.person_id, { requireVerified: reachCfg.email.requireVerified });
+    if (!to) {
+      throw new Error(
+        `sendApproved: no verified address for person ${msg.person_id} — nothing is sent to an unverified inbox.`,
+      );
+    }
+  }
+
+  if (sameDayConflict(db, msg.person_id, msg.channel, now)) {
+    if (msg.status !== "queued") {
+      db.prepare("UPDATE message SET status = 'queued' WHERE id = ?").run(messageId);
+    }
+    return { status: "deferred_same_day", messageId, channel: msg.channel };
+  }
+
+  const action = msg.channel === "linkedin" ? "linkedin_message" : "email";
+  const sentAt = toSqliteTs(now);
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    assertSendAllowed({ db, reachCfg, action });
+    db.prepare("UPDATE message SET status = 'sent', sent_at = ?, error = NULL WHERE id = ?")
+      .run(sentAt, messageId);
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+
+  if (pace && sleepImpl) await sleepImpl(paceDelayMs(reachCfg, rng));
+
+  recordEvent(db, {
+    runId, agent, entity: "message", entityId: messageId, action: "message_sent",
+    detail: { channel: msg.channel, step: msg.step, at: sentAt },
+  });
+
+  if (msg.channel === "linkedin") {
+    // send_mode `queue` (PRD §10): the user clicks send in LinkedIn themselves.
+    // The status flip is the record of that action; bsk driving is M5.
+    return { status: "sent", messageId, channel: "linkedin" };
+  }
+
+  const candidate = loadCandidateFacts(reachCfg);
+  const fromName = candidate.name || reachCfg.mail.user;
+  const from = reachCfg.mail.user ? `"${fromName}" <${reachCfg.mail.user}>` : fromName;
+  const attachment = resumeAttachment(db, reachCfg, msg);
+  const send = sendMailImpl ?? (await defaultSendMail(reachCfg));
+  try {
+    const info = await send({
+      from,
+      to,
+      subject: msg.subject ?? "",
+      text: withOptOut(msg.body, reachCfg.email.optoutLine),
+      attachments: attachment ? [attachment] : [],
+    });
+    if (info?.messageId) {
+      db.prepare("UPDATE message SET provider_ref = ? WHERE id = ?").run(String(info.messageId), messageId);
+    }
+  } catch (err) {
+    db.prepare("UPDATE message SET status = 'failed', error = ? WHERE id = ?")
+      .run(String(err.message ?? err), messageId);
+    recordEvent(db, {
+      runId, agent, entity: "message", entityId: messageId, action: "send_failed",
+      detail: { channel: msg.channel, error: String(err.message ?? err) },
+    });
+    throw new Error(`sendApproved: SMTP failed for message ${messageId}: ${err.message ?? err}`);
+  }
+  return { status: "sent", messageId, channel: "email", to };
 }

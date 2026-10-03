@@ -177,6 +177,13 @@ function primaryVerifiedEmail(db, personId, requireVerified) {
   return rows.find((r) => r.verification === "valid") ?? null;
 }
 
+// Re-checked at send time, not just when the draft was composed: the user may
+// have verified or suppressed an address in between. Returns the address
+// string, or null when nothing has cleared the verification gate.
+export function outboundEmail(db, personId, { requireVerified = true } = {}) {
+  return primaryVerifiedEmail(db, personId, requireVerified)?.email ?? null;
+}
+
 export function hasInboundReply(db, personId) {
   return Boolean(db.prepare(
     "SELECT 1 FROM message WHERE person_id = ? AND direction = 'in' LIMIT 1",
