@@ -54,7 +54,7 @@
   - `upsertCompany` from `job.company`; `target_role` UNIQUE on `job_ref` — INSERT or UPDATE title/url/status.
   - Default jobs path: `join(reachCfg.paths.dataDir, "jobs.tsv")`. Tests pass `jobs` array and skip the file.
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```js
 // 1. two jobs ready/applied → two target_role rows, companies deduped if same name
@@ -63,10 +63,10 @@
 // 4. second sync same job_ref updates title, row count unchanged
 ```
 
-- [ ] **Step 2:** run test — missing module.
-- [ ] **Step 3: Implement** `syncTargets` in `lib/reach/targets.mjs`.
-- [ ] **Step 4:** pass.
-- [ ] **Step 5: Commit** `feat(reach): sync target_role rows from jobs.tsv ready/applied`
+- [x] **Step 2:** run test — missing module.
+- [x] **Step 3: Implement** `syncTargets` in `lib/reach/targets.mjs`.
+- [x] **Step 4:** pass.
+- [x] **Step 5: Commit** `feat(reach): sync target_role rows from jobs.tsv ready/applied`
 
 ---
 
@@ -84,8 +84,8 @@
   - URL regex `linkedin.com/in/[A-Za-z0-9_-]+`. Skip lines with no name.
   - `importPaste(db, text, { apply = false, source = "paste_import" }) -> { parsed, imported, skipped, preview }` — same review-first as CSV. `persona` from title (recruiter / hiring manager / engineer|scientist|designer → senior_ic / else other). Does **not** set `connection` (these are prospects, not already-connected). Event `paste_imported`.
 
-- [ ] **Step 1: Failing tests** — three-line paste with URL; `apply:false` writes 0; `apply:true` one person `source='paste_import'`; CLI `--paste` without `--yes` writes 0 (inject text via function, not real stdin, in the unit test; CLI smoke can pass a temp file with `--paste --file`).
-- [ ] **Step 2–5:** TDD; commit `feat(reach): paste import of search/company-page text (review-first)`
+- [x] **Step 1: Failing tests** — three-line paste with URL; `apply:false` writes 0; `apply:true` one person `source='paste_import'`; CLI `--paste` without `--yes` writes 0 (inject text via function, not real stdin, in the unit test; CLI smoke can pass a temp file with `--paste --file`).
+- [x] **Step 2–5:** TDD; commit `feat(reach): paste import of search/company-page text (review-first)`
 
 ---
 
@@ -102,8 +102,8 @@
   - `extractPeople(html, { company }) -> Array<{ full_name, title, linkedin_url }>` — names from obvious team-page patterns (`<h2>`/`itemprop`/`linkedin.com/in/` anchors). Best-effort; empty array is ok.
   - `importPublicPage(db, url, { fetchImpl, apply = true }) -> { imported, skipped, reason }` — if robots deny or HTTP 403/401/404 → `{ skipped: 1, reason: "blocked"|"not_found" }`, event `public_page_skipped`. No fingerprint spoofing. `source='public_page'`.
 
-- [ ] **Step 1: Failing tests** — robots Disallow skip (no upsert); 200 HTML with one `/in/` link + name → person; 403 → skipped, no throw.
-- [ ] **Step 2–5:** TDD; commit `feat(reach): public team-page import honoring robots.txt`
+- [x] **Step 1: Failing tests** — robots Disallow skip (no upsert); 200 HTML with one `/in/` link + name → person; 403 → skipped, no throw.
+- [x] **Step 2–5:** TDD; commit `feat(reach): public team-page import honoring robots.txt`
 
 ---
 
@@ -126,7 +126,7 @@
     - clamp 0–100. Reasons JSON array stored on `person.relevance_reasons`.
   - `queueDaily(db, reachCfg, { now } = {}) -> { considered, queued, skipped }` — consider `person` rows with `lifecycle='prospect'`, no blocking connection, score ≥ min, persona in list. Sort by score desc, then id. For each, `checkCap({ db, reachCfg, action: "invite" })`; if `!ok`, stop (rest stay prospect, not failed). Insert/update `connection` `status='queued'`, `queued_at`, `person_target` if a `target_role` exists for that company. Event `invite_queued`. Apply R1-4 skips first.
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```js
 // 1. recruiter + live target + title match → score >= 70 and reasons include those keys
@@ -137,7 +137,7 @@
 // 6. suppressed linkedin_url skipped
 ```
 
-- [ ] **Step 2–5:** TDD; commit `feat(reach): relevance scoring and capped invite queue`
+- [x] **Step 2–5:** TDD; commit `feat(reach): relevance scoring and capped invite queue`
 
 ---
 
@@ -155,8 +155,8 @@
   - `run(cfg, { emit, jobs, fetchImpl, cooldown } = {})` — `syncTargets` → optional search per target company → `queueDaily`. Return `{ targets, queued, skipped }`.
   - CLI `prospect` loads cfg, runs `run`, prints queued count.
 
-- [ ] **Step 1: Failing tests** — `run` with two in-memory jobs + two paste-level persons already in db → queued ≥ 1; fetchImpl 429 → still queues local people; CLI `prospect` exit 0 on fixture cfg.
-- [ ] **Step 2–5:** TDD; commit `feat(reach): prospect agent + optional own-key people search`
+- [x] **Step 1: Failing tests** — `run` with two in-memory jobs + two paste-level persons already in db → queued ≥ 1; fetchImpl 429 → still queues local people; CLI `prospect` exit 0 on fixture cfg.
+- [x] **Step 2–5:** TDD; commit `feat(reach): prospect agent + optional own-key people search`
 
 ---
 
