@@ -1,6 +1,6 @@
 # TASK — M5 optional (bsk, approval ramp, health apply)
 
-You are implementing **only M5**. Defaults must stay `send_mode: queue` and `approval_mode: review`. No anti-bot evasion.
+M1–M4 are on `main`. This merge lands **M5**. Defaults stay `send_mode: queue` and `approval_mode: review`. No anti-bot evasion.
 
 **Full plan:** `fillow-reach/docs/plans/2026-10-02-fillow-reach-m5.md`
 **Spec:** PRD R1-6/R1-7, R3-7, §7 health guard, §14 M5
