@@ -5,6 +5,7 @@ import { collectStatus, renderStatus, statusJson, runMigrations } from "./status
 import { doctorMain } from "./doctor.mjs";
 import { setupMain } from "./setup.mjs";
 import { approveAllGrounded, approveDraft, listPendingApproval, preview } from "./send.mjs";
+import { run as runOutreach } from "../../agents/reach-outreach.mjs";
 
 // Commands registered by later tasks (import/suppress/forget/...) append a row
 // here: { name, summary, run(args, ctx) }. ctx = { cfg, openDb, out }.
@@ -16,6 +17,7 @@ export const commands = [
   { name: "pause", summary: "halt all sends — drop a PAUSE kill-switch file", run: pauseCmd },
   { name: "resume", summary: "remove the PAUSE kill-switch file", run: resumeCmd },
   { name: "migrate", summary: "apply pending sqlite migrations", run: migrateCmd },
+  { name: "outreach", summary: "compose drafts for eligible people (--send for approved)", run: outreachCmd },
   { name: "approve", summary: "review drafts (--all-grounded); M3 is review-only", run: approveCmd },
 ];
 
@@ -109,6 +111,29 @@ async function resumeCmd(_args, ctx) {
     recordEvent(ctx.openDb(), { agent: "cli", entity: "system", action: "resume", detail: { was } });
   } catch { /* audit trail is best-effort */ }
   out(was ? "resumed — PAUSE removed." : "resumed — no PAUSE file was present.");
+  return 0;
+}
+
+// Drafting and sending are deliberately separate steps: `reach outreach`
+// composes, `reach approve` is the human gate, `reach outreach --send` delivers
+// what was approved. M3 never promotes a draft on its own (PRD §5 R3-7).
+async function outreachCmd(args, ctx) {
+  const { cfg, out } = ctx;
+  const stats = await runOutreach(cfg, { send: args.includes("--send") });
+  if (args.includes("--json")) {
+    out(JSON.stringify(stats));
+    return 0;
+  }
+  out(
+    `outreach: composed ${stats.composed} (${stats.grounded} grounded, ${stats.ungrounded} grounding-failed),`
+    + ` skipped ${stats.skipped}`,
+  );
+  if (stats.composedErrors) out(`${stats.composedErrors} draft(s) failed to compose`);
+  if (args.includes("--send")) {
+    out(`sent ${stats.sent}, deferred same-day ${stats.deferred}, not sent ${stats.sendErrors}`);
+  } else {
+    out("review them with: reach approve");
+  }
   return 0;
 }
 
