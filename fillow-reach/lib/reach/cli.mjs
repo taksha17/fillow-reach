@@ -1,14 +1,18 @@
+import { readFileSync } from "node:fs";
+
 import { loadReachConfig } from "./config.mjs";
 import { openReachMigratedDb, recordEvent } from "./db.mjs";
 import { isPaused, pause, resume } from "./killswitch.mjs";
 import { collectStatus, renderStatus, statusJson, runMigrations } from "./status.mjs";
 import { doctorMain } from "./doctor.mjs";
 import { setupMain } from "./setup.mjs";
+import { importConnectionsCsv } from "./import-connections.mjs";
 import { importPaste } from "./import-paste.mjs";
-import { readFileSync } from "node:fs";
+import { addSuppression, forgetPerson } from "./people.mjs";
+import { run as runContacts } from "../../agents/reach-contacts.mjs";
 import { run as runProspect } from "../../agents/reach-prospect.mjs";
 
-// Commands registered by later tasks (import/suppress/forget/...) append a row
+// Commands registered by later tasks (send/approve/report/...) append a row
 // here: { name, summary, run(args, ctx) }. ctx = { cfg, openDb, out }.
 // doctor/setup must report config failures as rows, not die on load — raw: true.
 export const commands = [
@@ -18,14 +22,15 @@ export const commands = [
   { name: "pause", summary: "halt all sends — drop a PAUSE kill-switch file", run: pauseCmd },
   { name: "resume", summary: "remove the PAUSE kill-switch file", run: resumeCmd },
   { name: "migrate", summary: "apply pending sqlite migrations", run: migrateCmd },
-  { name: "import", summary: "--paste text (review-first; --yes to write)", run: importCmd },
+  { name: "import", summary: "Connections.csv or --paste text (review-first; --yes to write)", run: importCmd },
   { name: "prospect", summary: "sync targets + sources, build capped invite queue", run: prospectCmd },
+  { name: "contacts", summary: "detect acceptances/bounces and enrich emails", run: contactsCmd },
+  { name: "suppress", summary: "add email, LinkedIn URL, or domain to do-not-contact", run: suppressCmd },
+  { name: "forget", summary: "erase a person and cascade derived rows", run: forgetCmd },
 ];
 
 // Planned but unregistered: shown in help so the surface is discoverable.
 const PLANNED = [
-  { name: "suppress", summary: "(M1+) add a person/domain to the suppression list" },
-  { name: "forget", summary: "(M1+) erase a person and all derived data" },
   { name: "send", summary: "(M3+) run one outreach batch (respects caps + PAUSE)" },
   { name: "approve", summary: "(M2+) review drafts" },
   { name: "report", summary: "(M2+) daily digest" },
@@ -108,26 +113,42 @@ function readStdinAll() {
 }
 
 async function importCmd(args, ctx) {
-  const { out, openDb } = ctx;
-  if (!args.includes("--paste")) {
-    // CSV path behavior belongs to M1 (PR #1); this branch ships paste only.
-    out("csv import ships with M1 (PR #1); this build accepts --paste only");
-    return 2;
-  }
-  const yes = args.includes("--yes");
-  const fileIdx = args.indexOf("--file");
-  const file = fileIdx !== -1 ? args[fileIdx + 1] : null;
-  const text = file ? readFileSync(file, "utf8") : await readStdinAll();
-  const db = openDb();
-  const res = importPaste(db, text, { apply: yes });
-  if (!yes) {
-    for (const row of res.preview.slice(0, 20)) {
-      out(`  ${row.full_name} · ${row.title ?? "?"}${row.company ? ` at ${row.company}` : ""}${row.linkedin_url ? ` · ${row.linkedin_url}` : ""}`);
+  const { out } = ctx;
+  if (args.includes("--paste")) {
+    const yes = args.includes("--yes");
+    const fileIdx = args.indexOf("--file");
+    const file = fileIdx !== -1 ? args[fileIdx + 1] : null;
+    const text = file ? readFileSync(file, "utf8") : await readStdinAll();
+    const db = ctx.openDb();
+    const res = importPaste(db, text, { apply: yes });
+    if (!yes) {
+      for (const row of res.preview.slice(0, 20)) {
+        out(`  ${row.full_name} · ${row.title ?? "?"}${row.company ? ` at ${row.company}` : ""}${row.linkedin_url ? ` · ${row.linkedin_url}` : ""}`);
+      }
+      out(`parsed ${res.parsed}, not written (pass --yes)`);
+      return 0;
     }
-    out(`parsed ${res.parsed}, not written (pass --yes)`);
+    out(`paste imported: ${res.imported}${res.skipped ? `, skipped ${res.skipped}` : ""}`);
     return 0;
   }
-  out(`paste imported: ${res.imported}${res.skipped ? `, skipped ${res.skipped}` : ""}`);
+
+  const apply = args.includes("--yes");
+  const path = args.filter((a) => a !== "--yes").at(-1);
+  if (!path) {
+    out("usage: reach import [--yes] <connections.csv> | --paste [--file <path>] [--yes]");
+    return 1;
+  }
+  const csvText = readFileSync(path, "utf8");
+  const db = ctx.openDb();
+  const r = importConnectionsCsv(db, csvText, { apply });
+  if (!apply) {
+    for (const row of r.preview) {
+      out(`${row.full_name} — ${row.title} @ ${row.company} ${row.linkedin_url}`);
+    }
+    out(`parsed ${r.parsed}, not written (pass --yes)`);
+    return 0;
+  }
+  out(`imported ${r.imported}, skipped ${r.skipped} of ${r.parsed}`);
   return 0;
 }
 
@@ -135,6 +156,43 @@ async function prospectCmd(_args, ctx) {
   const { cfg, out } = ctx;
   const res = await runProspect(cfg, { emit: () => {} });
   out(`targets synced: ${res.targets} · invites queued: ${res.queued}${res.skipped ? ` · held back: ${res.skipped}` : ""}`);
+  return 0;
+}
+
+function suppressKind(value) {
+  if (value.includes("@")) return "email";
+  if (/linkedin\./i.test(value)) return "linkedin_url";
+  return "domain";
+}
+
+async function suppressCmd(args, ctx) {
+  const value = args[0];
+  if (!value) {
+    ctx.out("usage: reach suppress <email|linkedin-url|domain>");
+    return 1;
+  }
+  const kind = suppressKind(value);
+  addSuppression(ctx.openDb(), { kind, value, reason: "manual" });
+  ctx.out(`suppressed ${kind} ${value}`);
+  return 0;
+}
+
+async function forgetCmd(args, ctx) {
+  const id = Number.parseInt(args[0], 10);
+  if (!Number.isInteger(id)) {
+    ctx.out("usage: reach forget <person-id>");
+    return 1;
+  }
+  const r = forgetPerson(ctx.openDb(), id);
+  ctx.out(r.ok ? `forgot person ${id}` : `no person ${id}`);
+  return r.ok ? 0 : 1;
+}
+
+async function contactsCmd(_args, ctx) {
+  const { cfg, out } = ctx;
+  if (!cfg.mail.configured) out("mailbox skipped");
+  const stats = await runContacts(cfg);
+  out(`contacts: accepted ${stats.accepted} unmatched ${stats.unmatched} hard ${stats.hard} soft ${stats.soft} enriched ${stats.enriched}`);
   return 0;
 }
 

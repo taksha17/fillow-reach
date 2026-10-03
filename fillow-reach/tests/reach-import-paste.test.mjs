@@ -124,9 +124,12 @@ test("8. CLI import --paste --yes writes the person", async () => {
   db.close();
 });
 
-test("9. CLI import <csv-path> without --paste: CSV lands with M1 (PR #1)", async () => {
+test("9. CLI import <csv-path> without --paste runs the M1 CSV flow (preview only)", async () => {
   const fx = fixture();
-  const { code, out } = await cli(["import", "some.csv"], fx);
-  assert.equal(code, 2);
-  assert.ok(/M1/i.test(out), out);
+  const p = join(fx.dir, "connections.csv");
+  writeFileSync(p, "First Name,Last Name,Company,Position,URL,Email Address\nJane,Doe,Acme,Engineer,https://www.linkedin.com/in/janedoe,jane@acme.test\n", "utf8");
+  const { code, out } = await cli(["import", p], fx);
+  assert.equal(code, 0, out);
+  assert.ok(/not written/i.test(out), out);
+  assert.ok(/pass --yes/i.test(out), out);
 });

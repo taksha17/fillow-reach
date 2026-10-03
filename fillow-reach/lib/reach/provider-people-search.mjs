@@ -1,23 +1,7 @@
 // Own-key people search (PRD R1-10): runs only when the user configured a key
 // AND set a non-zero monthly_quota. Provider errors (4xx/5xx/network) put the
 // provider on a run-scoped cooldown — never fatal to the batch.
-function monthNow() {
-  return new Date().toISOString().slice(0, 7);
-}
-
-function readUsage(db, provider) {
-  try {
-    return db.prepare("SELECT calls FROM provider_usage WHERE provider=? AND month=?").get(provider, monthNow())?.calls ?? 0;
-  } catch {
-    return 0;
-  }
-}
-
-function countUsage(db, provider) {
-  db.prepare(
-    "INSERT INTO provider_usage (provider, month, calls) VALUES (?,?,1) ON CONFLICT(provider, month) DO UPDATE SET calls=calls+1"
-  ).run(provider, monthNow());
-}
+import { readProviderUsage, incrementProviderUsage } from "./provider-usage.mjs";
 
 async function searchApollo(key, { company, domain, fetchImpl }) {
   const body = domain
@@ -73,7 +57,7 @@ export async function searchPeople(reachCfg, { company, domain = null, db = null
     const quota = reachCfg.enrichment.monthlyQuota[provider] ?? 0;
     const key = provider === "apollo" ? reachCfg.enrichment.apolloKey : reachCfg.enrichment.hunterKey;
     if (!quota || !key || cooldown.has(provider)) continue;
-    if (db && readUsage(db, provider) >= quota) { cooldown.add(provider); continue; }
+    if (db && readProviderUsage(db, provider) >= quota) { cooldown.add(provider); continue; }
     let result;
     try {
       result = provider === "apollo"
@@ -84,7 +68,7 @@ export async function searchPeople(reachCfg, { company, domain = null, db = null
       continue;
     }
     if (result.error) { cooldown.add(provider); continue; }
-    if (db) countUsage(db, provider);
+    if (db) incrementProviderUsage(db, provider);
     out.push(...result.drafts);
   }
   return out;
