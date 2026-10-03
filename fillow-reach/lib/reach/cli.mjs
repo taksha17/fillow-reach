@@ -1,13 +1,20 @@
+import { readFileSync } from "node:fs";
+
 import { loadReachConfig } from "./config.mjs";
 import { openReachMigratedDb, recordEvent } from "./db.mjs";
 import { isPaused, pause, resume } from "./killswitch.mjs";
 import { collectStatus, renderStatus, statusJson, runMigrations } from "./status.mjs";
 import { doctorMain } from "./doctor.mjs";
 import { setupMain } from "./setup.mjs";
+import { importConnectionsCsv } from "./import-connections.mjs";
+import { importPaste } from "./import-paste.mjs";
+import { addSuppression, forgetPerson } from "./people.mjs";
+import { run as runContacts } from "../../agents/reach-contacts.mjs";
+import { run as runProspect } from "../../agents/reach-prospect.mjs";
 import { approveAllGrounded, approveDraft, listPendingApproval, preview } from "./send.mjs";
 import { run as runOutreach } from "../../agents/reach-outreach.mjs";
 
-// Commands registered by later tasks (import/suppress/forget/...) append a row
+// Commands registered by later tasks (send/approve/report/...) append a row
 // here: { name, summary, run(args, ctx) }. ctx = { cfg, openDb, out }.
 // doctor/setup must report config failures as rows, not die on load — raw: true.
 export const commands = [
@@ -17,17 +24,18 @@ export const commands = [
   { name: "pause", summary: "halt all sends — drop a PAUSE kill-switch file", run: pauseCmd },
   { name: "resume", summary: "remove the PAUSE kill-switch file", run: resumeCmd },
   { name: "migrate", summary: "apply pending sqlite migrations", run: migrateCmd },
+  { name: "import", summary: "Connections.csv or --paste text (review-first; --yes to write)", run: importCmd },
+  { name: "prospect", summary: "sync targets + sources, build capped invite queue", run: prospectCmd },
+  { name: "contacts", summary: "detect acceptances/bounces and enrich emails", run: contactsCmd },
+  { name: "suppress", summary: "add email, LinkedIn URL, or domain to do-not-contact", run: suppressCmd },
+  { name: "forget", summary: "erase a person and cascade derived rows", run: forgetCmd },
   { name: "outreach", summary: "compose drafts for eligible people (--send for approved)", run: outreachCmd },
   { name: "approve", summary: "review drafts (--all-grounded); M3 is review-only", run: approveCmd },
 ];
 
 // Planned but unregistered: shown in help so the surface is discoverable.
 const PLANNED = [
-  { name: "import", summary: "(M1+) parse pasted search results / LinkedIn CSV" },
-  { name: "suppress", summary: "(M1+) add a person/domain to the suppression list" },
-  { name: "forget", summary: "(M1+) erase a person and all derived data" },
-  { name: "send", summary: "(M3+) run one outreach batch (respects caps + PAUSE)" },
-  { name: "report", summary: "(M2+) daily digest" },
+  { name: "report", summary: "(M4+) daily digest" },
 ];
 
 function usageText() {
@@ -90,6 +98,104 @@ async function doctorCmd(args, { out, opts }) {
 
 async function setupCmd(_args, { out, opts }) {
   return setupMain([], { out, ...opts });
+}
+
+function readStdinAll() {
+  return new Promise((resolve, reject) => {
+    if (process.stdin.isTTY) {
+      reject(new Error("no input: pipe text in or pass --file <path>"));
+      return;
+    }
+    let text = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (c) => { text += c; });
+    process.stdin.on("end", () => resolve(text));
+    process.stdin.on("error", reject);
+  });
+}
+
+async function importCmd(args, ctx) {
+  const { out } = ctx;
+  if (args.includes("--paste")) {
+    const yes = args.includes("--yes");
+    const fileIdx = args.indexOf("--file");
+    const file = fileIdx !== -1 ? args[fileIdx + 1] : null;
+    const text = file ? readFileSync(file, "utf8") : await readStdinAll();
+    const db = ctx.openDb();
+    const res = importPaste(db, text, { apply: yes });
+    if (!yes) {
+      for (const row of res.preview.slice(0, 20)) {
+        out(`  ${row.full_name} · ${row.title ?? "?"}${row.company ? ` at ${row.company}` : ""}${row.linkedin_url ? ` · ${row.linkedin_url}` : ""}`);
+      }
+      out(`parsed ${res.parsed}, not written (pass --yes)`);
+      return 0;
+    }
+    out(`paste imported: ${res.imported}${res.skipped ? `, skipped ${res.skipped}` : ""}`);
+    return 0;
+  }
+
+  const apply = args.includes("--yes");
+  const path = args.filter((a) => a !== "--yes").at(-1);
+  if (!path) {
+    out("usage: reach import [--yes] <connections.csv> | --paste [--file <path>] [--yes]");
+    return 1;
+  }
+  const csvText = readFileSync(path, "utf8");
+  const db = ctx.openDb();
+  const r = importConnectionsCsv(db, csvText, { apply });
+  if (!apply) {
+    for (const row of r.preview) {
+      out(`${row.full_name} — ${row.title} @ ${row.company} ${row.linkedin_url}`);
+    }
+    out(`parsed ${r.parsed}, not written (pass --yes)`);
+    return 0;
+  }
+  out(`imported ${r.imported}, skipped ${r.skipped} of ${r.parsed}`);
+  return 0;
+}
+
+async function prospectCmd(_args, ctx) {
+  const { cfg, out } = ctx;
+  const res = await runProspect(cfg, { emit: () => {} });
+  out(`targets synced: ${res.targets} · invites queued: ${res.queued}${res.skipped ? ` · held back: ${res.skipped}` : ""}`);
+  return 0;
+}
+
+function suppressKind(value) {
+  if (value.includes("@")) return "email";
+  if (/linkedin\./i.test(value)) return "linkedin_url";
+  return "domain";
+}
+
+async function suppressCmd(args, ctx) {
+  const value = args[0];
+  if (!value) {
+    ctx.out("usage: reach suppress <email|linkedin-url|domain>");
+    return 1;
+  }
+  const kind = suppressKind(value);
+  addSuppression(ctx.openDb(), { kind, value, reason: "manual" });
+  ctx.out(`suppressed ${kind} ${value}`);
+  return 0;
+}
+
+async function forgetCmd(args, ctx) {
+  const id = Number.parseInt(args[0], 10);
+  if (!Number.isInteger(id)) {
+    ctx.out("usage: reach forget <person-id>");
+    return 1;
+  }
+  const r = forgetPerson(ctx.openDb(), id);
+  ctx.out(r.ok ? `forgot person ${id}` : `no person ${id}`);
+  return r.ok ? 0 : 1;
+}
+
+async function contactsCmd(_args, ctx) {
+  const { cfg, out } = ctx;
+  if (!cfg.mail.configured) out("mailbox skipped");
+  const stats = await runContacts(cfg);
+  out(`contacts: accepted ${stats.accepted} unmatched ${stats.unmatched} hard ${stats.hard} soft ${stats.soft} enriched ${stats.enriched}`);
+  return 0;
 }
 
 async function pauseCmd(args, ctx) {
