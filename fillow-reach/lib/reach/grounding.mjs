@@ -33,7 +33,7 @@ const STOPWORDS = new Set([
   // generic recruiting / outreach vocabulary
   "work", "works", "working", "worked", "role", "roles", "team", "teams",
   "company", "companies", "opportunity", "opportunities", "position", "positions",
-  "candidate", "candidates", "hire", "hiring", "hire", "recruiter", "recruiting",
+  "candidate", "candidates", "hire", "hiring", "recruiter", "recruiting",
   "looking", "interest", "interested", "please", "let", "know", "reach", "reached",
   "message", "messaging", "connect", "connection", "connections", "follow",
   "following", "followup", "email", "emails", "linkedin", "chat", "talk", "call",
@@ -41,21 +41,21 @@ const STOPWORDS = new Set([
   "day", "days", "week", "weeks", "month", "months", "year", "years", "today",
   "tomorrow", "later", "soon", "recently", "currently", "first", "second", "next",
   "new", "old", "good", "great", "best", "better", "sure", "happy", "glad",
-  "excited", "passionate", "passion", "experience", "experienced", "years",
+  "excited", "passionate", "passion", "experience", "experienced",
   "skills", "skill", "ability", "abilities", "strong", "strength", "strengths",
   "workplace", "culture", "mission", "value", "values", "benefit", "benefits",
   "resume", "cv", "portfolio", "website", "profile", "link", "links", "detail",
-  "details", "info", "information", "let", "tell", "feel", "felt", "think",
+  "details", "info", "information", "tell", "feel", "felt", "think",
   "thought", "want", "wanted", "need", "needed", "make", "made", "making",
   "took", "take", "taking", "come", "coming", "came", "get", "got", "give",
   "gave", "put", "use", "used", "using", "help", "helped", "love", "loved",
   "enjoy", "enjoyed", "proud", "gladly", "quickly", "easily", "ready",
-  "willing", "open", "available", "currently", "free", "time", "kind", "sort",
-  "lot", "bit", "really", "much", "many", "more", "most", "less", "least",
-  "also", "even", "ever", "never", "always", "often", "sometimes", "usually",
-  "etc", "vs", "per", "plus", "minus", "onto", "up", "out", "off", "down",
+  "willing", "open", "available", "free", "kind", "sort",
+  "lot", "bit", "much", "many", "more", "most", "less", "least",
+  "even", "ever", "never", "always", "often", "sometimes", "usually",
+  "etc", "vs", "plus", "minus", "onto", "up", "out", "off", "down",
   "back", "forward", "again", "twice", "half", "double", "single", "other",
-  "another", "such", "own", "same", "very", "just", "too", "only", "also",
+  "another", "such", "same", "too", "only",
   // generic work verbs — a claim about *what was built* is checkable, a claim
   // about *doing something* is not a fact about the candidate
   "build", "builds", "building", "built", "create", "creates", "creating",
@@ -69,7 +69,7 @@ const STOPWORDS = new Set([
   "improving", "improved", "grow", "grows", "growing", "grew", "learn", "learns",
   "learning", "learned", "study", "studies", "studying", "studied", "focus",
   "focuses", "focused", "join", "joins", "joining", "joined", "move", "moves",
-  "moving", "moved", "bring", "brings", "bringing", "brought", "want", "wanted",
+  "moving", "moved", "bring", "brings", "bringing", "brought",
 ]);
 
 const CONNECTORS = new Set(["of", "and", "the", "for", "de", "van", "at"]);
