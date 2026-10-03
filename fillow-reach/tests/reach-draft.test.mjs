@@ -9,7 +9,7 @@ import { loadReachConfig } from "../lib/reach/config.mjs";
 import {
   isSuppressed, loadFactPack, needsEmailDraft, needsLinkedinDraft, sourcesText,
 } from "../lib/reach/facts.mjs";
-import { insertDraft } from "../lib/reach/draft.mjs";
+import { insertDraft, composeDraft } from "../lib/reach/draft.mjs";
 
 const FIXTURE_YAML = [
   "candidate:",
@@ -252,4 +252,32 @@ test("13. loadFactPack throws for an unknown person, and a missing profile yield
   assert.deepEqual(orphan.candidate, {}, "an unreadable profile must not break drafting");
   assert.deepEqual(orphan.sources, ["Dana Ruiz", "Talent Lead"]);
   db.close();
+});
+
+test("composeDraft without chatImpl and with no LLM keys fails with the env message, not a module error", async () => {
+  const { db, cfg } = setup();
+  const personId = addPerson(db);
+  const saved = { ...process.env };
+  for (const key of ["GROQ_API_KEY", "NVIDIA_API_KEY", "OPENAI_API_KEY"]) delete process.env[key];
+  try {
+    await assert.rejects(
+      composeDraft(db, cfg, personId, "linkedin", {}),
+      /no LLM API key configured/,
+    );
+  } finally {
+    Object.assign(process.env, saved);
+  }
+});
+
+test("vendored top-level lib/llm.mjs: makeLlmChat builds a callable when GROQ_API_KEY is set", async () => {
+  const mod = await import("../../lib/llm.mjs");
+  const saved = process.env.GROQ_API_KEY;
+  process.env.GROQ_API_KEY = "test-key";
+  try {
+    const chat = mod.makeLlmChat({ secrets: { groq_api_key: "test-key" }, ai: {} });
+    assert.equal(typeof chat, "function");
+    assert.equal(mod.makeLlmChat({ secrets: {}, ai: {} }), null);
+  } finally {
+    if (saved === undefined) delete process.env.GROQ_API_KEY; else process.env.GROQ_API_KEY = saved;
+  }
 });

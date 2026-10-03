@@ -81,22 +81,34 @@ function parseModelOutput(raw) {
   return { subject: "Hello", body: text };
 }
 
-// Parent lib/llm.mjs is not vendored into this repo, so it is imported lazily
-// and only when the caller supplies no seam. Tests and the CLI both inject
-// `chatImpl`, which keeps the suite free of API keys and network calls.
+// Tests and the CLI both may inject `chatImpl`, which keeps the suite free of
+// API keys and network calls.
+// Default path: build the provider cfg from the same .env keys the parent
+// harness uses and hand off to the vendored top-level lib/llm.mjs chain.
 async function parentChat(system, user) {
   let mod;
   try {
     mod = await import("../../../lib/llm.mjs");
   } catch (err) {
     throw new Error(
-      `composeDraft: no chatImpl supplied and the parent LLM module is unavailable (${err.message}).`
+      `composeDraft: no chatImpl supplied and the LLM module is unavailable (${err.message}).`
       + " Pass a chatImpl(system, user) -> string function.",
     );
   }
-  const chat = mod.makeLlmChat ?? mod.chat;
+  const cfg = {
+    secrets: {
+      groq_api_key: process.env.GROQ_API_KEY || "",
+      nvidia_api_key: process.env.NVIDIA_API_KEY || "",
+      openai_api_key: process.env.OPENAI_API_KEY || "",
+    },
+    ai: {},
+  };
+  const chat = mod.makeLlmChat?.(cfg, { temperature: 0.3, thinking: false });
   if (typeof chat !== "function") {
-    throw new Error("composeDraft: parent lib/llm.mjs exports neither makeLlmChat nor chat.");
+    throw new Error(
+      "composeDraft: no LLM API key configured — set GROQ_API_KEY (or NVIDIA_API_KEY)"
+      + " in .env, or pass a chatImpl(system, user).",
+    );
   }
   return chat(system, user);
 }
