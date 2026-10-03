@@ -1,11 +1,13 @@
 import { existsSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 
-import { assertSendAllowed } from "./caps.mjs";
 import { recordEvent } from "./db.mjs";
 import {
   isSuppressed, loadCandidateFacts, loadPerson, outboundEmail, toSqliteTs, utcDate,
 } from "./facts.mjs";
+import { pause } from "./killswitch.mjs";
+import { hasBskAck, sendLinkedinViaBsk } from "./bsk-send.mjs";
+import { assertSendAllowedHealthy } from "./health-apply.mjs";
 
 export function listPendingApproval(db) {
   return db.prepare(
@@ -123,12 +125,67 @@ function withOptOut(body, optoutLine) {
   return `${text.replace(/\s+$/, "")}\n\n${line}`;
 }
 
+function detectAsHazard(err) {
+  return /captcha|unusual activity|restricted|checkpoint|sorry, we|verify you.?re human|unexpected/i.test(String(err.message || err));
+}
+
+async function driveLinkedinBsk(db, reachCfg, { personId, kind, body, bskImpl } = {}) {
+  if (!hasBskAck(reachCfg)) {
+    throw new Error("acknowledgement required — run reach setup --ack-bsk");
+  }
+  const person = db.prepare("SELECT linkedin_url FROM person WHERE id = ?").get(personId);
+  try {
+    const result = await sendLinkedinViaBsk({
+      url: person?.linkedin_url, kind, body, bskImpl,
+    });
+    recordEvent(db, {
+      agent: "outreach",
+      entity: "connection",
+      entityId: personId,
+      action: "invite_sent_bsk",
+      detail: { kind },
+    });
+    return result;
+  } catch (err) {
+    if (err.code === "LINKEDIN_HAZARD" || detectAsHazard(err)) {
+      pause(reachCfg, String(err.message || err));
+      recordEvent(db, {
+        agent: "outreach",
+        entity: "system",
+        action: "linkedin_warning",
+        detail: { message: String(err.message || err) },
+      });
+    }
+    throw err;
+  }
+}
+
+// Object form is the M5 invite/bsk seam (`personId` + `channel`). Numeric
+// `messageId` is the M3 outbound-message path. Queue remains the default.
+export async function sendApproved(db, reachCfg, messageIdOrOpts, opts = {}) {
+  if (messageIdOrOpts && typeof messageIdOrOpts === "object") {
+    return sendApprovedDirect(db, reachCfg, messageIdOrOpts);
+  }
+  return sendApprovedMessage(db, reachCfg, messageIdOrOpts, opts);
+}
+
+async function sendApprovedDirect(db, reachCfg, {
+  personId, channel, kind = "invite", body = "", bskImpl,
+} = {}) {
+  const action = channel === "email" ? "email" : (kind === "message" ? "linkedin_message" : "invite");
+  assertSendAllowedHealthy({ db, reachCfg, action });
+  if (channel === "linkedin" && reachCfg.linkedin?.sendMode === "bsk") {
+    return driveLinkedinBsk(db, reachCfg, { personId, kind, body, bskImpl });
+  }
+  return { ok: true, queued: true };
+}
+
 // PRD §7: the cap is checked inside the same transaction that records the send.
 // A throw here leaves the message approved/queued — over cap items roll over,
 // they never fail.
-export async function sendApproved(db, reachCfg, messageId, {
+async function sendApprovedMessage(db, reachCfg, messageId, {
   sendMailImpl, now = new Date(), sleepImpl, pace = true, rng = Math.random,
-  runId = null, agent = "outreach",
+  runId = null, agent = "outreach", bskImpl,
 } = {}) {
   const msg = db.prepare("SELECT * FROM message WHERE id = ?").get(messageId);
   if (!msg) throw new Error(`sendApproved: no message ${messageId}`);
@@ -179,10 +236,16 @@ export async function sendApproved(db, reachCfg, messageId, {
   }
 
   const action = msg.channel === "linkedin" ? "linkedin_message" : "email";
+  if (msg.channel === "linkedin" && reachCfg.linkedin?.sendMode === "bsk") {
+    await driveLinkedinBsk(db, reachCfg, {
+      personId: msg.person_id, kind: "message", body: msg.body, bskImpl,
+    });
+  }
+
   const sentAt = toSqliteTs(now);
   db.exec("BEGIN IMMEDIATE");
   try {
-    assertSendAllowed({ db, reachCfg, action });
+    assertSendAllowedHealthy({ db, reachCfg, action });
     db.prepare("UPDATE message SET status = 'sent', sent_at = ?, error = NULL WHERE id = ?")
       .run(sentAt, messageId);
     db.exec("COMMIT");
@@ -200,7 +263,7 @@ export async function sendApproved(db, reachCfg, messageId, {
 
   if (msg.channel === "linkedin") {
     // send_mode `queue` (PRD §10): the user clicks send in LinkedIn themselves.
-    // The status flip is the record of that action; bsk driving is M5.
+    // `bsk` (M5) already drove Chromium above when configured.
     return { status: "sent", messageId, channel: "linkedin" };
   }
 

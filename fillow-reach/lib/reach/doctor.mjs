@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 
 import { load } from "js-yaml";
 import dotenv from "dotenv";
@@ -10,6 +11,7 @@ import { loadReachConfig, validateReachBlock } from "./config.mjs";
 import { openReachDb, MIGRATIONS_DIR } from "./db.mjs";
 import { withImap } from "./imap.mjs";
 import { isPaused } from "./killswitch.mjs";
+import { hasBskAck } from "./bsk-send.mjs";
 
 const MIN_NODE = [22, 13, 0];
 
@@ -44,7 +46,7 @@ const MAIL_GUIDANCE = "REACH_MAIL_USER/REACH_MAIL_PASSWORD unset (GMAIL_IMAP_USE
   + " — use a Gmail app password, not your login password: it requires 2-Step Verification,"
   + " and on Google Workspace your admin may disable app passwords entirely";
 
-export async function collectDoctorChecks({ profileFile, envFile, dataDir, skipMail = false } = {}) {
+export async function collectDoctorChecks({ profileFile, envFile, dataDir, skipMail = false, whichBsk } = {}) {
   const rows = [];
   const push = (ok, label, detail, warn = false) => rows.push({ ok, warn, label, detail });
   const envLookup = envLookupFrom(envFile ?? process.env.REACH_ENV_FILE);
@@ -144,6 +146,26 @@ export async function collectDoctorChecks({ profileFile, envFile, dataDir, skipM
     } catch (err) {
       push(false, "imap", `login failed against ${imap.host}:${imap.port}: ${err.message} — ${MAIL_GUIDANCE}`);
     }
+  }
+
+  // 8: optional bsk + approval ramp (warn only)
+  let bskPresent = false;
+  if (typeof whichBsk === "function") {
+    bskPresent = Boolean(whichBsk());
+  } else {
+    try {
+      const r = spawnSync("bsk", ["status"], { encoding: "utf8", timeout: 3000 });
+      bskPresent = r.status === 0;
+    } catch {
+      bskPresent = false;
+    }
+  }
+  push(true, "bsk", bskPresent ? "bsk binary found" : "bsk binary missing — queue mode still works", !bskPresent);
+  if (reachCfg?.linkedin?.sendMode === "bsk" && !hasBskAck(reachCfg)) {
+    push(true, "bsk ack", "send_mode=bsk without BSK_ACK — run reach setup --ack-bsk", true);
+  }
+  if (reachCfg && reachCfg.approvalMode !== "review") {
+    push(true, "approval", `approval_mode=${reachCfg.approvalMode} — sample/auto is opt-in`, true);
   }
 
   return rows;

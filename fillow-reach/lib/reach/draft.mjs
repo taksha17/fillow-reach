@@ -1,6 +1,7 @@
 import { recordEvent } from "./db.mjs";
 import { groundingCheck, sanitizeUntrusted } from "./grounding.mjs";
 import { loadFactPack, sourcesText } from "./facts.mjs";
+import { maybeAutoApprove, noteDraftGrounding } from "./approval-ramp.mjs";
 
 // Every draft enters the queue as `needs_approval` with grounding still unset.
 // M3 is review-only (PRD §5 R3-7), so there is no path that writes a row
@@ -105,6 +106,7 @@ async function parentChat(system, user) {
 // path is what refuses it (PRD §5 R3-4, §13).
 export async function composeDraft(db, reachCfg, personId, channel, {
   chatImpl, step = 1, runId = null, model = null, agent = "outreach", subject = null,
+  rngImpl,
 } = {}) {
   const factPack = loadFactPack(db, reachCfg, personId);
   const system = DRAFT_SYSTEM_PROMPT;
@@ -136,5 +138,7 @@ export async function composeDraft(db, reachCfg, personId, channel, {
     action: "draft_composed",
     detail: { channel, step, grounding_ok: ok ? 1 : 0, notes },
   });
+  noteDraftGrounding(db, messageId, ok ? 1 : 0);
+  if (ok) maybeAutoApprove(db, reachCfg, messageId, rngImpl ? { rngImpl } : {});
   return { messageId, grounding_ok: ok ? 1 : 0, notes, body, subject: modelSubject };
 }

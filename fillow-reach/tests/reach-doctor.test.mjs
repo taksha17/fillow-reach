@@ -41,8 +41,8 @@ async function cli(argv, fx) {
 
 test("1. sane fixture: every row present, nothing failed", async () => {
   const fx = migrated(fixture("reach:\n  enabled: true\n", "REACH_MAIL_USER=u@example.com\nREACH_MAIL_PASSWORD=pw\nHUNTER_API_KEY=h\nAPOLLO_API_KEY=a\n"));
-  const rows = await collectDoctorChecks({ ...fx, skipMail: true });
-  assert.deepEqual(rows.map((r) => r.label), ["node", "node:sqlite", "config", "migrations", "mail creds", "hunter", "apollo", "imap"]);
+  const rows = await collectDoctorChecks({ ...fx, skipMail: true, whichBsk: () => false });
+  assert.deepEqual(rows.map((r) => r.label), ["node", "node:sqlite", "config", "migrations", "mail creds", "hunter", "apollo", "imap", "bsk"]);
   assert.ok(rows.every((r) => r.ok), JSON.stringify(rows));
 });
 
@@ -122,4 +122,33 @@ test("10. CLI doctor exit 1 when a row fails, even with other warn rows", async 
   const { code, out } = await cli(["doctor", "--no-mail"], fx);
   assert.equal(code, 1);
   assert.match(out, /approval_mode/);
+});
+
+test("11. bsk binary missing is a warn, never a fail", async () => {
+  const fx = migrated(fixture());
+  const rows = await collectDoctorChecks({ ...fx, skipMail: true, whichBsk: () => false });
+  const row = find(rows, "bsk");
+  assert.equal(row.ok, true);
+  assert.equal(row.warn, true);
+  assert.match(row.detail, /bsk binary missing/);
+});
+
+test("12. send_mode bsk without BSK_ACK warns; does not fail", async () => {
+  const fx = migrated(fixture("reach:\n  enabled: true\n  linkedin:\n    send_mode: bsk\n"));
+  const rows = await collectDoctorChecks({ ...fx, skipMail: true, whichBsk: () => true });
+  const row = find(rows, "bsk ack");
+  assert.equal(row.ok, true);
+  assert.equal(row.warn, true);
+  assert.match(row.detail, /BSK_ACK/);
+  const { code } = await cli(["doctor", "--no-mail"], fx);
+  assert.equal(code, 0);
+});
+
+test("13. approval_mode sample is a warn note", async () => {
+  const fx = migrated(fixture("reach:\n  enabled: true\n  approval_mode: sample\n"));
+  const rows = await collectDoctorChecks({ ...fx, skipMail: true, whichBsk: () => true });
+  const row = find(rows, "approval");
+  assert.equal(row.ok, true);
+  assert.equal(row.warn, true);
+  assert.match(row.detail, /sample/);
 });

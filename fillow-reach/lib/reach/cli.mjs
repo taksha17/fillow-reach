@@ -98,8 +98,8 @@ async function doctorCmd(args, { out, opts }) {
   return doctorMain(args, { out, opts });
 }
 
-async function setupCmd(_args, { out, opts }) {
-  return setupMain([], { out, ...opts });
+async function setupCmd(args, { out, opts }) {
+  return setupMain(args, { out, ...opts });
 }
 
 function readStdinAll() {
