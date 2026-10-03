@@ -11,6 +11,8 @@ import { importPaste } from "./import-paste.mjs";
 import { addSuppression, forgetPerson } from "./people.mjs";
 import { run as runContacts } from "../../agents/reach-contacts.mjs";
 import { run as runProspect } from "../../agents/reach-prospect.mjs";
+import { approveAllGrounded, approveDraft, listPendingApproval, preview } from "./send.mjs";
+import { run as runOutreach } from "../../agents/reach-outreach.mjs";
 
 // Commands registered by later tasks (send/approve/report/...) append a row
 // here: { name, summary, run(args, ctx) }. ctx = { cfg, openDb, out }.
@@ -27,13 +29,13 @@ export const commands = [
   { name: "contacts", summary: "detect acceptances/bounces and enrich emails", run: contactsCmd },
   { name: "suppress", summary: "add email, LinkedIn URL, or domain to do-not-contact", run: suppressCmd },
   { name: "forget", summary: "erase a person and cascade derived rows", run: forgetCmd },
+  { name: "outreach", summary: "compose drafts for eligible people (--send for approved)", run: outreachCmd },
+  { name: "approve", summary: "review drafts (--all-grounded); M3 is review-only", run: approveCmd },
 ];
 
 // Planned but unregistered: shown in help so the surface is discoverable.
 const PLANNED = [
-  { name: "send", summary: "(M3+) run one outreach batch (respects caps + PAUSE)" },
-  { name: "approve", summary: "(M2+) review drafts" },
-  { name: "report", summary: "(M2+) daily digest" },
+  { name: "report", summary: "(M4+) daily digest" },
 ];
 
 function usageText() {
@@ -215,6 +217,78 @@ async function resumeCmd(_args, ctx) {
     recordEvent(ctx.openDb(), { agent: "cli", entity: "system", action: "resume", detail: { was } });
   } catch { /* audit trail is best-effort */ }
   out(was ? "resumed — PAUSE removed." : "resumed — no PAUSE file was present.");
+  return 0;
+}
+
+// Drafting and sending are deliberately separate steps: `reach outreach`
+// composes, `reach approve` is the human gate, `reach outreach --send` delivers
+// what was approved. M3 never promotes a draft on its own (PRD §5 R3-7).
+async function outreachCmd(args, ctx) {
+  const { cfg, out } = ctx;
+  const stats = await runOutreach(cfg, { send: args.includes("--send") });
+  if (args.includes("--json")) {
+    out(JSON.stringify(stats));
+    return 0;
+  }
+  out(
+    `outreach: composed ${stats.composed} (${stats.grounded} grounded, ${stats.ungrounded} grounding-failed),`
+    + ` skipped ${stats.skipped}`,
+  );
+  if (stats.composedErrors) out(`${stats.composedErrors} draft(s) failed to compose`);
+  if (args.includes("--send")) {
+    out(`sent ${stats.sent}, deferred same-day ${stats.deferred}, not sent ${stats.sendErrors}`);
+  } else {
+    out("review them with: reach approve");
+  }
+  return 0;
+}
+
+async function approveCmd(args, ctx) {
+  const { out } = ctx;
+  const json = args.includes("--json");
+  const allGrounded = args.includes("--all-grounded");
+  const db = ctx.openDb();
+
+  if (allGrounded) {
+    const r = approveAllGrounded(db, { by: "user" });
+    if (json) {
+      out(JSON.stringify(r));
+      return 0;
+    }
+    out(`approved ${r.approved.length} grounded draft(s): ${r.approved.join(", ") || "none"}`);
+    if (r.blocked.length) {
+      out(`left ${r.blocked.length} for review (grounding failed or unset): ${r.blocked.join(", ")}`);
+    }
+    return 0;
+  }
+
+  const id = Number.parseInt(args.find((a) => /^\d+$/.test(a)) ?? "", 10);
+  if (Number.isInteger(id)) {
+    try {
+      const r = approveDraft(db, id, { by: "user" });
+      out(json ? JSON.stringify(r) : `approved message ${r.messageId}`);
+      return 0;
+    } catch (err) {
+      out(`reach approve: ${err.message}`);
+      return 1;
+    }
+  }
+
+  const pending = listPendingApproval(db);
+  if (json) {
+    out(JSON.stringify(pending.map((r) => ({ ...r, preview: preview(r) }))));
+    return 0;
+  }
+  if (!pending.length) {
+    out("no drafts awaiting approval");
+    return 0;
+  }
+  for (const row of pending) {
+    const flag = row.grounding_ok === 1 ? "grounded" : row.grounding_ok === 0 ? "GROUNDING FAILED" : "ungrounded";
+    out(`${String(row.id).padStart(5)}  ${row.channel.padEnd(8)} step ${row.step}  ${flag.padEnd(16)}  ${preview(row)}`);
+  }
+  out("");
+  out("approve <id> | approve --all-grounded | approve --json");
   return 0;
 }
 
