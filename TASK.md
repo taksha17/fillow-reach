@@ -1,27 +1,26 @@
-# TASK — M1 R2 Contacts
+# TASK — M2 R1 Prospect
 
-You are implementing **only M1**. Do not start M2–M5. Do not recreate the CLI.
+You are implementing **only M2**. Depends on M1 people upsert if that has landed; otherwise use the people helpers described in the M1 plan or wait for M1 to merge.
 
-**Full plan:** `fillow-reach/docs/plans/2026-10-02-fillow-reach-m1.md`
-**Spec:** `fillow-reach/fillow Reach — PRD & Data Schema.md` §5 R2, §6, §8, §9, §14 M1
+**Full plan:** `fillow-reach/docs/plans/2026-10-02-fillow-reach-m2.md`
+**Spec:** PRD §5 R1, §14 M2
 **Index:** `fillow-reach/docs/plans/README.md`
 
 ## Done when
 
-- Sample Connections.csv imports (`already_connected` / `lifecycle=connected`)
-- Mailbox fixture flips `connection.status` to `accepted`
-- Hunter find+verify behind quota/cache; 401/402/429 skip the provider for the run
-- Suppression beats every other rule; `forget` + `purgeExpired` work
+- 10–15 ranked people per day with stored `relevance_reasons`
+- Paste import + public pages + (M1) Connections.csv
+- Queue is `connection.status='queued'` (mark-sent UI is M4)
 
 ## Tasks (TDD)
 
-1. `lib/reach/people.mjs` — upsertCompany, upsertPerson, isSuppressed, addSuppression, insertEmailAddress
-2. `lib/reach/import-connections.mjs` — CSV + CLI `import` (`--yes` to write)
-3. `lib/reach/acceptance.mjs` — acceptances + bounces, injectable fetcher
-4. Hunter + provider-usage
-5. CLI `contacts` / `suppress` / `forget` + `agents/reach-contacts.mjs`
+1. `lib/reach/targets.mjs` — sync `target_role` from jobs.tsv ready/applied
+2. Paste import `reach import --paste` (review-first `--yes`)
+3. Public pages + robots.txt, skip 403
+4. Score 0–100 + `queueDaily` with invite caps 15/day and 75/7d
+5. `agents/reach-prospect.mjs` + CLI `prospect`
 
-**Append** rows to existing `fillow-reach/lib/reach/cli.mjs` `commands`. Remove those names from `PLANNED`.
+No LinkedIn scraping. `send_mode: bsk` is M5.
 
 ## Test
 
@@ -29,5 +28,3 @@ You are implementing **only M1**. Do not start M2–M5. Do not recreate the CLI.
 cd fillow-reach
 node --disable-warning=ExperimentalWarning --test tests/*.mjs
 ```
-
-Never `npm test`. Fake identities only. All new files under `fillow-reach/`.
