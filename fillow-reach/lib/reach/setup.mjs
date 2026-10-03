@@ -12,6 +12,7 @@ import { withImap } from "./imap.mjs";
 import { buildReachBlockYaml, writeReachBlock } from "./profile-block.mjs";
 import { collectDoctorChecks, renderDoctor } from "./doctor.mjs";
 import { writeBskAck, bskAckPath } from "./bsk-send.mjs";
+import { pullLocalLlm, pullLocalRuntime } from "./local-llm.mjs";
 
 // Append-only .env merge: existing keys are never touched.
 export function mergeEnvText(currentText, wanted) {
@@ -256,12 +257,24 @@ export async function runReachSetup({ prompt, out, envFile, profileFile, dataDir
   return 0;
 }
 
-export async function setupMain(argv = [], { out, profileFile, envFile, dataDir } = {}) {
+export async function setupMain(argv = [], { out, profileFile, envFile, dataDir, fetchImpl } = {}) {
   try {
     if (argv.includes("--ack-bsk")) {
       const cfg = loadReachConfig({ profileFile, envFile, dataDir });
       writeBskAck(cfg);
       out(`wrote ${bskAckPath(cfg)}`);
+      return 0;
+    }
+    if (argv.includes("--pull-llm")) {
+      const cfg = loadReachConfig({ profileFile, envFile, dataDir });
+      const dest = await pullLocalLlm(cfg, { ...(fetchImpl ? { fetchImpl } : {}), force: argv.includes("--force") });
+      out(`wrote ${dest}`);
+      try {
+        const bin = await pullLocalRuntime(cfg, fetchImpl ? { fetchImpl } : {});
+        out(`runtime ${bin}`);
+      } catch (err) {
+        out(`runtime skip: ${err.message}`);
+      }
       return 0;
     }
     return await runReachSetup({ out, profileFile, envFile, dataDir });

@@ -15,6 +15,7 @@ import { approveAllGrounded, approveDraft, listPendingApproval, preview } from "
 import { run as runOutreach } from "../../agents/reach-outreach.mjs";
 import { startReachUi } from "./ui.mjs";
 import { reportDate, buildDailyReport, renderReportText, sendDailyReport } from "./report.mjs";
+import { localLlmStatus, pullLocalLlm, pullLocalRuntime, makeLocalChat } from "./local-llm.mjs";
 
 // Commands registered by later tasks (send/approve/report/...) append a row
 // here: { name, summary, run(args, ctx) }. ctx = { cfg, openDb, out }.
@@ -22,7 +23,7 @@ import { reportDate, buildDailyReport, renderReportText, sendDailyReport } from 
 export const commands = [
   { name: "status", summary: "usage vs caps, queue sizes, health", run: statusCmd },
   { name: "doctor", summary: "config/migrations/mailbox/keys checks (--no-mail)", run: doctorCmd, raw: true },
-  { name: "setup", summary: "guided onboarding wizard (PRD §9a)", run: setupCmd, raw: true },
+  { name: "setup", summary: "guided onboarding wizard (--ack-bsk, --pull-llm)", run: setupCmd, raw: true },
   { name: "pause", summary: "halt all sends — drop a PAUSE kill-switch file", run: pauseCmd },
   { name: "resume", summary: "remove the PAUSE kill-switch file", run: resumeCmd },
   { name: "migrate", summary: "apply pending sqlite migrations", run: migrateCmd },
@@ -35,6 +36,7 @@ export const commands = [
   { name: "approve", summary: "review drafts (--all-grounded); M3 is review-only", run: approveCmd },
   { name: "ui", summary: "local dashboard on 127.0.0.1:4181", run: uiCmd },
   { name: "report", summary: "build the daily digest (--send to email it)", run: reportCmd },
+  { name: "llm", summary: "local Qwen status / --pull / --test", run: llmCmd },
 ];
 
 // Planned but unregistered: shown in help so the surface is discoverable.
@@ -313,6 +315,36 @@ async function reportCmd(args, ctx) {
     const r = await sendDailyReport(db, cfg, { now: new Date(), dryRun: cfg.dryRun });
     out(r.status === "sent" ? `sent report ${r.date}` : `dry-run: report built, not sent (${r.date})`);
   }
+  return 0;
+}
+
+async function llmCmd(args, ctx) {
+  const { cfg, out } = ctx;
+  const force = args.includes("--force");
+  if (args.includes("--pull")) {
+    const dest = await pullLocalLlm(cfg, { force });
+    out(`wrote ${dest}`);
+    try {
+      const bin = await pullLocalRuntime(cfg, { force });
+      out(`runtime ${bin}`);
+    } catch (err) {
+      out(`runtime skip: ${err.message}`);
+    }
+    return 0;
+  }
+  if (args.includes("--test")) {
+    const text = await makeLocalChat(cfg)("Reply with JSON only: {\"ok\": true}", "ping");
+    out(text);
+    return 0;
+  }
+  const status = localLlmStatus(cfg);
+  if (args.includes("--json")) {
+    out(JSON.stringify(status));
+    return 0;
+  }
+  out(`local Qwen (${status.model})`);
+  out(`  gguf     ${status.gguf.present ? status.gguf.path : "missing — reach llm --pull"}`);
+  out(`  runtime  ${status.runtime.bundled ? status.runtime.path : (status.runtime.present ? "PATH" : "missing — reach llm --pull")}`);
   return 0;
 }
 
