@@ -6,6 +6,7 @@ import { doctorMain } from "./doctor.mjs";
 import { setupMain } from "./setup.mjs";
 import { importPaste } from "./import-paste.mjs";
 import { readFileSync } from "node:fs";
+import { run as runProspect } from "../../agents/reach-prospect.mjs";
 
 // Commands registered by later tasks (import/suppress/forget/...) append a row
 // here: { name, summary, run(args, ctx) }. ctx = { cfg, openDb, out }.
@@ -18,6 +19,7 @@ export const commands = [
   { name: "resume", summary: "remove the PAUSE kill-switch file", run: resumeCmd },
   { name: "migrate", summary: "apply pending sqlite migrations", run: migrateCmd },
   { name: "import", summary: "--paste text (review-first; --yes to write)", run: importCmd },
+  { name: "prospect", summary: "sync targets + sources, build capped invite queue", run: prospectCmd },
 ];
 
 // Planned but unregistered: shown in help so the surface is discoverable.
@@ -126,6 +128,13 @@ async function importCmd(args, ctx) {
     return 0;
   }
   out(`paste imported: ${res.imported}${res.skipped ? `, skipped ${res.skipped}` : ""}`);
+  return 0;
+}
+
+async function prospectCmd(_args, ctx) {
+  const { cfg, out } = ctx;
+  const res = await runProspect(cfg, { emit: () => {} });
+  out(`targets synced: ${res.targets} · invites queued: ${res.queued}${res.skipped ? ` · held back: ${res.skipped}` : ""}`);
   return 0;
 }
 
