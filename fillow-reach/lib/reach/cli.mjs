@@ -22,7 +22,7 @@ import { reportDate, buildDailyReport, renderReportText, sendDailyReport } from 
 export const commands = [
   { name: "status", summary: "usage vs caps, queue sizes, health", run: statusCmd },
   { name: "doctor", summary: "config/migrations/mailbox/keys checks (--no-mail)", run: doctorCmd, raw: true },
-  { name: "setup", summary: "guided onboarding wizard (PRD §9a)", run: setupCmd, raw: true },
+  { name: "setup", summary: "guided onboarding wizard (--ack-bsk, --pull-llm)", run: setupCmd, raw: true },
   { name: "pause", summary: "halt all sends — drop a PAUSE kill-switch file", run: pauseCmd },
   { name: "resume", summary: "remove the PAUSE kill-switch file", run: resumeCmd },
   { name: "migrate", summary: "apply pending sqlite migrations", run: migrateCmd },

@@ -12,6 +12,7 @@ import { openReachDb, MIGRATIONS_DIR } from "./db.mjs";
 import { withImap } from "./imap.mjs";
 import { isPaused } from "./killswitch.mjs";
 import { hasBskAck } from "./bsk-send.mjs";
+import { hasLocalGguf, localGgufPath } from "./local-llm.mjs";
 
 const MIN_NODE = [22, 13, 0];
 
@@ -166,6 +167,14 @@ export async function collectDoctorChecks({ profileFile, envFile, dataDir, skipM
   }
   if (reachCfg && reachCfg.approvalMode !== "review") {
     push(true, "approval", `approval_mode=${reachCfg.approvalMode} — sample/auto is opt-in`, true);
+  }
+
+  if (reachCfg) {
+    if (hasLocalGguf(reachCfg)) {
+      push(true, "local llm", `Qwen 1.5B GGUF at ${localGgufPath(reachCfg)}`, false);
+    } else {
+      push(true, "local llm", "Qwen GGUF missing — run reach setup --pull-llm (~1GB, ~1.5GB RAM)", true);
+    }
   }
 
   return rows;

@@ -2,6 +2,7 @@ import { recordEvent } from "./db.mjs";
 import { groundingCheck, sanitizeUntrusted } from "./grounding.mjs";
 import { loadFactPack, sourcesText } from "./facts.mjs";
 import { maybeAutoApprove, noteDraftGrounding } from "./approval-ramp.mjs";
+import { hasLocalGguf, makeLocalChat } from "./local-llm.mjs";
 
 // Every draft enters the queue as `needs_approval` with grounding still unset.
 // M3 is review-only (PRD §5 R3-7), so there is no path that writes a row
@@ -113,6 +114,19 @@ async function parentChat(system, user) {
   return chat(system, user);
 }
 
+async function defaultChat(reachCfg, system, user) {
+  try {
+    return await parentChat(system, user);
+  } catch (err) {
+    if (hasLocalGguf(reachCfg)) {
+      return makeLocalChat(reachCfg)(system, user);
+    }
+    throw new Error(
+      `${err.message} Local Qwen GGUF also missing — run reach setup --pull-llm.`,
+    );
+  }
+}
+
 // Phrase, then ground. The row is always written — a failed grounding lands as
 // `needs_approval` with grounding_ok=0 so the user can see and fix it; the send
 // path is what refuses it (PRD §5 R3-4, §13).
@@ -123,7 +137,7 @@ export async function composeDraft(db, reachCfg, personId, channel, {
   const factPack = loadFactPack(db, reachCfg, personId);
   const system = DRAFT_SYSTEM_PROMPT;
   const user = buildDraftPrompt(factPack, channel);
-  const chat = chatImpl ?? parentChat;
+  const chat = chatImpl ?? ((system, user) => defaultChat(reachCfg, system, user));
   const raw = await chat(system, user);
   const { subject: modelSubject, body } = parseModelOutput(raw);
   const { ok, notes } = groundingCheck(body, sourcesText(factPack));
