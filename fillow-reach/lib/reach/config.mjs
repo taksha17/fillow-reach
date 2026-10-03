@@ -5,7 +5,7 @@ import { load } from "js-yaml";
 import dotenv from "dotenv";
 
 import { PATHS, profilePath } from "../../../lib/paths.mjs";
-import { DEFAULT_GGUF_NAME, DEFAULT_QWEN_URL } from "./local-llm.mjs";
+import { DEFAULT_GGUF_NAME, DEFAULT_QWEN_URL, llamaCliName } from "./local-llm.mjs";
 
 export const REACH_DEFAULTS = Object.freeze({
   enabled: true,
@@ -310,6 +310,7 @@ export function loadReachConfig({ profileFile, envFile, dataDir } = {}) {
     localLlm: {
       ggufPath: envLookup("REACH_LLM_GGUF") || join(reachDir, "models", DEFAULT_GGUF_NAME),
       url: envLookup("REACH_LLM_URL") || DEFAULT_QWEN_URL,
+      llamaBin: envLookup("REACH_LLAMA_BIN") || join(reachDir, "bin", llamaCliName()),
     },
   };
 }

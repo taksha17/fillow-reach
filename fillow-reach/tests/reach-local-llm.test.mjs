@@ -136,3 +136,106 @@ test("8. .env.example documents REACH_LLM_GGUF", () => {
   const example = readFileSync(new URL("../.env.example", import.meta.url), "utf8");
   assert.match(example, /^REACH_LLM_GGUF=/m);
 });
+
+test("9. second pull without --force does not refetch", async () => {
+  const fx = fixture();
+  const cfg = loadReachConfig(fx);
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    const bytes = Buffer.from("GGUF-fake");
+    return { ok: true, status: 200, arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) };
+  };
+  const { pullLocalLlm } = await import("../lib/reach/local-llm.mjs");
+  await pullLocalLlm(cfg, { fetchImpl });
+  await pullLocalLlm(cfg, { fetchImpl });
+  assert.equal(calls, 1);
+});
+
+test("10. pickLlamaAsset picks the CPU archive for linux x64", async () => {
+  const { pickLlamaAsset } = await import("../lib/reach/local-llm.mjs");
+  const releases = [{
+    tag_name: "b11146",
+    assets: [
+      { name: "llama-b11146-bin-macos-arm64.tar.gz", browser_download_url: "https://example/mac.tgz" },
+      { name: "llama-b11146-bin-ubuntu-x64.tar.gz", browser_download_url: "https://example/linux.tgz" },
+      { name: "llama-b11146-bin-win-cpu-x64.zip", browser_download_url: "https://example/win.zip" },
+    ],
+  }];
+  const a = pickLlamaAsset(releases, { platform: "linux", arch: "x64" });
+  assert.equal(a.url, "https://example/linux.tgz");
+  assert.equal(a.name, "llama-b11146-bin-ubuntu-x64.tar.gz");
+});
+
+test("11. pullLocalRuntime writes llama-cli via extractImpl, never the network archive contents", async () => {
+  const { pullLocalRuntime, bundledLlamaPath, hasLocalRuntime } = await import("../lib/reach/local-llm.mjs");
+  const fx = fixture();
+  const cfg = loadReachConfig(fx);
+  assert.equal(hasLocalRuntime(cfg, { whichImpl: () => false }), false);
+  const dest = await pullLocalRuntime(cfg, {
+    fetchImpl: async (url) => {
+      if (String(url).includes("api.github.com")) {
+        return {
+          ok: true,
+          json: async () => [{
+            tag_name: "b1",
+            assets: [{ name: "llama-b1-bin-ubuntu-x64.tar.gz", browser_download_url: "https://example/linux.tgz" }],
+          }],
+        };
+      }
+      return { ok: true, arrayBuffer: async () => Buffer.from("archive") };
+    },
+    extractImpl: async (_archive, destDir) => {
+      mkdirSync(destDir, { recursive: true });
+      writeFileSync(join(destDir, "llama-cli"), "#!/bin/true\n", "utf8");
+    },
+    platform: "linux",
+    arch: "x64",
+  });
+  assert.equal(dest, bundledLlamaPath(cfg));
+  assert.equal(existsSync(dest), true);
+  assert.equal(hasLocalRuntime(cfg, { whichImpl: () => false }), true);
+});
+
+test("12. extractChatText keeps a JSON object out of llama-cli chatter", async () => {
+  const { extractChatText } = await import("../lib/reach/local-llm.mjs");
+  const raw = "load_backend: ok\n{\"subject\":\"Hi\",\"body\":\"Hello Dana\"}\nllama_print_timings: 12ms";
+  assert.equal(extractChatText(raw), "{\"subject\":\"Hi\",\"body\":\"Hello Dana\"}");
+});
+
+test("13. reach llm --json reports missing gguf and runtime", async () => {
+  const { runReachCli } = await import("../lib/reach/cli.mjs");
+  const fx = fixture();
+  let out = "";
+  const code = await runReachCli(["llm", "--json"], { stdout: { write: (s) => { out += String(s); } }, ...fx });
+  assert.equal(code, 0);
+  const j = JSON.parse(out);
+  assert.equal(j.gguf.present, false);
+  assert.equal(j.runtime.bundled, false);
+});
+
+test("14. composeDraft without API keys uses local GGUF + inferImpl", async () => {
+  const { composeDraft } = await import("../lib/reach/draft.mjs");
+  const { openReachDb, migrateReachDb } = await import("../lib/reach/db.mjs");
+  const fx = fixture("candidate:\n  name: Robin Vega\nreach:\n  enabled: true\n");
+  const cfg = loadReachConfig(fx);
+  mkdirSync(dirname(localGgufPath(cfg)), { recursive: true });
+  writeFileSync(localGgufPath(cfg), "GGUF-fake", "utf8");
+  const db = openReachDb(":memory:");
+  migrateReachDb(db);
+  db.prepare("INSERT INTO person (full_name, title, persona, source) VALUES ('Dana Ruiz', 'Talent Lead', 'recruiter', 'manual')").run();
+  const saved = { ...process.env };
+  for (const key of ["GROQ_API_KEY", "NVIDIA_API_KEY", "OPENAI_API_KEY"]) delete process.env[key];
+  try {
+    const res = await composeDraft(db, cfg, 1, "linkedin", {
+      inferImpl: async () => '{"subject":"","body":"Hi Dana"}',
+    });
+    assert.equal(res.body, "Hi Dana");
+    const row = db.prepare("SELECT model FROM message WHERE id = ?").get(res.messageId);
+    assert.match(String(row.model), /qwen/i);
+  } finally {
+    Object.assign(process.env, saved);
+    db.close();
+  }
+});
+

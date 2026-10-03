@@ -42,7 +42,7 @@ async function cli(argv, fx) {
 test("1. sane fixture: every row present, nothing failed", async () => {
   const fx = migrated(fixture("reach:\n  enabled: true\n", "REACH_MAIL_USER=u@example.com\nREACH_MAIL_PASSWORD=pw\nHUNTER_API_KEY=h\nAPOLLO_API_KEY=a\n"));
   const rows = await collectDoctorChecks({ ...fx, skipMail: true, whichBsk: () => false });
-  assert.deepEqual(rows.map((r) => r.label), ["node", "node:sqlite", "config", "migrations", "mail creds", "hunter", "apollo", "imap", "bsk", "local llm"]);
+  assert.deepEqual(rows.map((r) => r.label), ["node", "node:sqlite", "config", "migrations", "mail creds", "hunter", "apollo", "imap", "bsk", "local llm", "local runtime"]);
   assert.ok(rows.every((r) => r.ok), JSON.stringify(rows));
 });
 

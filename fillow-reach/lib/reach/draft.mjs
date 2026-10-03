@@ -2,7 +2,7 @@ import { recordEvent } from "./db.mjs";
 import { groundingCheck, sanitizeUntrusted } from "./grounding.mjs";
 import { loadFactPack, sourcesText } from "./facts.mjs";
 import { maybeAutoApprove, noteDraftGrounding } from "./approval-ramp.mjs";
-import { hasLocalGguf, makeLocalChat } from "./local-llm.mjs";
+import { hasLocalGguf, makeLocalChat, LOCAL_MODEL_ID } from "./local-llm.mjs";
 
 // Every draft enters the queue as `needs_approval` with grounding still unset.
 // M3 is review-only (PRD §5 R3-7), so there is no path that writes a row
@@ -114,15 +114,16 @@ async function parentChat(system, user) {
   return chat(system, user);
 }
 
-async function defaultChat(reachCfg, system, user) {
+async function defaultChat(reachCfg, system, user, { inferImpl } = {}) {
   try {
-    return await parentChat(system, user);
+    return { text: await parentChat(system, user), model: null };
   } catch (err) {
     if (hasLocalGguf(reachCfg)) {
-      return makeLocalChat(reachCfg)(system, user);
+      const text = await makeLocalChat(reachCfg, { inferImpl })(system, user);
+      return { text, model: LOCAL_MODEL_ID };
     }
     throw new Error(
-      `${err.message} Local Qwen GGUF also missing — run reach setup --pull-llm.`,
+      `${err.message} Local Qwen GGUF also missing — run reach llm --pull.`,
     );
   }
 }
@@ -132,12 +133,17 @@ async function defaultChat(reachCfg, system, user) {
 // path is what refuses it (PRD §5 R3-4, §13).
 export async function composeDraft(db, reachCfg, personId, channel, {
   chatImpl, step = 1, runId = null, model = null, agent = "outreach", subject = null,
-  rngImpl,
+  rngImpl, inferImpl,
 } = {}) {
   const factPack = loadFactPack(db, reachCfg, personId);
   const system = DRAFT_SYSTEM_PROMPT;
   const user = buildDraftPrompt(factPack, channel);
-  const chat = chatImpl ?? ((system, user) => defaultChat(reachCfg, system, user));
+  let usedModel = model;
+  const chat = chatImpl ?? (async (sys, usr) => {
+    const r = await defaultChat(reachCfg, sys, usr, { inferImpl });
+    usedModel = usedModel ?? r.model;
+    return r.text;
+  });
   const raw = await chat(system, user);
   const { subject: modelSubject, body } = parseModelOutput(raw);
   const { ok, notes } = groundingCheck(body, sourcesText(factPack));
@@ -149,7 +155,7 @@ export async function composeDraft(db, reachCfg, personId, channel, {
     step,
     subject: subject ?? (channel === "linkedin" ? null : modelSubject),
     body,
-    model,
+    model: usedModel,
     resumeAssetId: factPack.resumeAsset?.id ?? null,
     runId,
     agent,

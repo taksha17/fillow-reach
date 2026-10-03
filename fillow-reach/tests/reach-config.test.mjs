@@ -162,7 +162,7 @@ test("7. opt-out line, report.time, retentionDays come through verbatim", () => 
 
 test("10. .env.example documents every env key the loader reads", () => {
   const example = readFileSync(new URL("../.env.example", import.meta.url), "utf8");
-  for (const key of ["REACH_DRY_RUN", "REACH_MAIL_USER", "REACH_MAIL_PASSWORD", "HUNTER_API_KEY", "APOLLO_API_KEY", "REACH_LLM_GGUF", "REACH_LLM_URL"]) {
+  for (const key of ["REACH_DRY_RUN", "REACH_MAIL_USER", "REACH_MAIL_PASSWORD", "HUNTER_API_KEY", "APOLLO_API_KEY", "REACH_LLM_GGUF", "REACH_LLM_URL", "REACH_LLAMA_BIN"]) {
     assert.ok(new RegExp(`^${key}=`, "m").test(example), `.env.example missing ${key}`);
   }
 });

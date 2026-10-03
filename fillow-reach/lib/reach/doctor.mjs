@@ -12,7 +12,7 @@ import { openReachDb, MIGRATIONS_DIR } from "./db.mjs";
 import { withImap } from "./imap.mjs";
 import { isPaused } from "./killswitch.mjs";
 import { hasBskAck } from "./bsk-send.mjs";
-import { hasLocalGguf, localGgufPath } from "./local-llm.mjs";
+import { hasLocalGguf, hasLocalRuntime, localGgufPath, bundledLlamaPath } from "./local-llm.mjs";
 
 const MIN_NODE = [22, 13, 0];
 
@@ -47,7 +47,7 @@ const MAIL_GUIDANCE = "REACH_MAIL_USER/REACH_MAIL_PASSWORD unset (GMAIL_IMAP_USE
   + " — use a Gmail app password, not your login password: it requires 2-Step Verification,"
   + " and on Google Workspace your admin may disable app passwords entirely";
 
-export async function collectDoctorChecks({ profileFile, envFile, dataDir, skipMail = false, whichBsk } = {}) {
+export async function collectDoctorChecks({ profileFile, envFile, dataDir, skipMail = false, whichBsk, whichLlama } = {}) {
   const rows = [];
   const push = (ok, label, detail, warn = false) => rows.push({ ok, warn, label, detail });
   const envLookup = envLookupFrom(envFile ?? process.env.REACH_ENV_FILE);
@@ -173,8 +173,17 @@ export async function collectDoctorChecks({ profileFile, envFile, dataDir, skipM
     if (hasLocalGguf(reachCfg)) {
       push(true, "local llm", `Qwen 1.5B GGUF at ${localGgufPath(reachCfg)}`, false);
     } else {
-      push(true, "local llm", "Qwen GGUF missing — run reach setup --pull-llm (~1GB, ~1.5GB RAM)", true);
+      push(true, "local llm", "Qwen GGUF missing — run reach llm --pull (~1GB, ~1.5GB RAM)", true);
     }
+    const runtimeOk = hasLocalRuntime(reachCfg, { whichImpl: whichLlama });
+    push(
+      true,
+      "local runtime",
+      runtimeOk
+        ? `llama-cli at ${existsSync(bundledLlamaPath(reachCfg)) ? bundledLlamaPath(reachCfg) : "PATH"}`
+        : "llama-cli missing — run reach llm --pull",
+      !runtimeOk,
+    );
   }
 
   return rows;
