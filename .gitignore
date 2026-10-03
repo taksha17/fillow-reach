@@ -6,3 +6,4 @@ node_modules/
 .qwen/
 data/
 coverage/
+config/
