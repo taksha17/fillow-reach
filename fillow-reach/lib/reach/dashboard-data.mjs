@@ -73,16 +73,46 @@ export function markInviteSent(db, personId) {
   recordEvent(db, { agent: "report", entity: "connection", entityId: id, action: "invite_marked_sent", detail: {} });
 }
 
+// Draft review loop: every out-message with its grounding verdict, newest first.
+export function draftsList(db, limit = 100) {
+  return db.prepare(
+    `SELECT m.id, m.person_id, p.full_name, p.linkedin_url, m.channel, m.step, m.status,
+            m.subject, m.body, m.grounding_ok, m.grounding_notes, m.created_at
+     FROM message m JOIN person p ON p.id = m.person_id
+     WHERE m.direction = 'out'
+     ORDER BY m.id DESC LIMIT ?`,
+  ).all(limit);
+}
+
+export function targetsList(db, limit = 100) {
+  return db.prepare(
+    `SELECT t.id, t.job_ref, t.title, t.status, c.name AS company
+     FROM target_role t LEFT JOIN company c ON c.id = t.company_id
+     ORDER BY t.id DESC LIMIT ?`,
+  ).all(limit);
+}
+
+export function eventsTail(db, limit = 100) {
+  return db.prepare(
+    `SELECT id, ts, agent, entity, entity_id, action, detail
+     FROM event_log ORDER BY id DESC LIMIT ?`,
+  ).all(limit);
+}
+
 export function collectDashboard(db, reachCfg) {
   return {
     funnel: funnelCounts(db),
     queue: todayQueue(db),
     approvals: approvalQueue(db),
     people: peopleList(db),
+    drafts: draftsList(db),
+    targets: targetsList(db),
+    events: eventsTail(db),
     usage: usageSnapshot(db),
     limits: reachCfg.limits,
     health: healthGuard(db, reachCfg),
     errors: errorList(db),
     paused: isPaused(reachCfg),
+    dryRun: reachCfg.dryRun,
   };
 }

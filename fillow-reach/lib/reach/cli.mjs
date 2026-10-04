@@ -33,7 +33,7 @@ export const commands = [
   { name: "forget", summary: "erase a person and cascade derived rows", run: forgetCmd },
   { name: "outreach", summary: "compose drafts for eligible people (--send for approved)", run: outreachCmd },
   { name: "approve", summary: "review drafts (--all-grounded); M3 is review-only", run: approveCmd },
-  { name: "ui", summary: "local dashboard on 127.0.0.1:4181", run: uiCmd },
+  { name: "ui", summary: "local end-to-end console on 127.0.0.1:4181", run: uiCmd },
   { name: "report", summary: "build the daily digest (--send to email it)", run: reportCmd },
 ];
 

@@ -15,7 +15,7 @@ import {
   personTimeline,
   markInviteSent,
 } from "../lib/reach/dashboard-data.mjs";
-import { renderDashboardHtml, startReachUi } from "../lib/reach/ui.mjs";
+import { consolePageHtml, startReachUi, escapeHtml } from "../lib/reach/ui.mjs";
 import { runReachCli } from "../lib/reach/cli.mjs";
 
 function mem() {
@@ -50,26 +50,11 @@ test("1. empty funnel is all zeros", () => {
   db.close();
 });
 
-test("2. empty dashboard html contains Funnel and 0", () => {
-  const html = renderDashboardHtml({
-    funnel: { prospect: 0, invited: 0, connected: 0, messaged: 0, replied: 0, closed: 0, suppressed: 0 },
-    queue: [],
-    approvals: [],
-    people: [],
-    usage: { day: { invite: 0, linkedin_message: 0, email: 0 }, week: { invite: 0, linkedin_message: 0, email: 0 } },
-    limits: { invitesPerDay: 15, invitesPer7d: 75, linkedinMessagesPer7d: 75, emailsPerDay: 15 },
-    health: { acceptanceRate14d: null, bounceRate14d: null, halfTargets: false, emailPaused: false },
-    errors: [],
-    paused: false,
-  });
-  assert.match(html, /Funnel/);
-  assert.match(html, /0/);
-  assert.match(html, /Today's queue/);
-  assert.match(html, /Approvals/);
-  assert.match(html, /People/);
-  assert.match(html, /Usage vs caps/);
-  assert.match(html, /Health/);
-  assert.match(html, /Errors/);
+test("2. console shell carries the pipeline tabs and the session token", () => {
+  const html = consolePageHtml("tok-abc123tok-abc123");
+  for (const marker of ["fillow Reach", "data-token=\"tok-abc123tok-abc123\"", "Queue", "Drafts", "People", "Targets", "Activity", "Import", "/api/state"]) {
+    assert.ok(html.includes(marker), `missing ${marker}`);
+  }
 });
 
 test("3. markInviteSent flips queued to sent_via manual", () => {
@@ -88,24 +73,26 @@ test("3. markInviteSent flips queued to sent_via manual", () => {
   db.close();
 });
 
-test("4. html escapes script in a person name", () => {
-  const html = renderDashboardHtml({
-    funnel: { prospect: 0, invited: 0, connected: 0, messaged: 0, replied: 0, closed: 0, suppressed: 0 },
-    queue: [{
-      person_id: 1, full_name: "<script>alert(1)</script>", title: "Recruiter",
-      company: "Acme", linkedin_url: "linkedin.com/in/x", relevance_score: 70,
-    }],
-    approvals: [],
-    people: [{ id: 1, full_name: "<script>alert(1)</script>" }],
-    usage: { day: { invite: 0, linkedin_message: 0, email: 0 }, week: { invite: 0, linkedin_message: 0, email: 0 } },
-    limits: { invitesPerDay: 15, invitesPer7d: 75, linkedinMessagesPer7d: 75, emailsPerDay: 15 },
-    health: { acceptanceRate14d: null, bounceRate14d: null, halfTargets: false, emailPaused: false },
-    errors: [],
-    paused: false,
+test("4. person pages escape script in a person name", async () => {
+  const fx = fixture();
+  const cfg = loadReachConfig(fx);
+  const db = openReachMigratedDb(cfg);
+  const companyId = upsertCompany(db, { name: "X Corp" });
+  const { personId } = upsertPerson(db, {
+    full_name: "<script>alert(1)</script>", title: "Recruiter", companyId, source: "manual",
   });
-  assert.ok(!html.includes("<script>alert(1)</script>"));
-  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
-  assert.match(html, /\/mark-sent\/1/);
+  db.close();
+  const { server, url } = await startReachUi(cfg, { port: 0, host: "127.0.0.1" });
+  try {
+    const res = await fetch(`${url}/person/${personId}`);
+    const html = await res.text();
+    assert.ok(!html.includes("<script>alert(1)</script>"));
+    assert.ok(html.includes("\u0026lt;script\u0026gt;alert(1)\u0026lt;/script\u0026gt;"));
+  } finally {
+    server.closeAllConnections?.();
+    server.close();
+  }
+  assert.equal(escapeHtml("<b>x</b>"), "\u0026lt;b\u0026gt;x\u0026lt;/b\u0026gt;");
 });
 
 test("5. todayQueue and approvalQueue read fixture rows", () => {
@@ -127,59 +114,66 @@ test("5. todayQueue and approvalQueue read fixture rows", () => {
   db.close();
 });
 
-test("6. startReachUi on port 0 serves html and mark-sent POST", async () => {
+test("6. startReachUi on port 0 serves the console and the mark-sent API", async () => {
   const fx = fixture();
   const cfg = loadReachConfig(fx);
   const db = openReachMigratedDb(cfg);
   const personId = seedQueued(db, { name: "Ada Lovelace" });
   db.close();
-  const { server, url } = await startReachUi(cfg, { port: 0, host: "127.0.0.1" });
+  const { server, url, token } = await startReachUi(cfg, { port: 0, host: "127.0.0.1" });
   try {
     assert.match(url, /^http:\/\/127\.0\.0\.1:\d+/);
     const home = await fetch(url);
     const html = await home.text();
-    assert.match(html, /Funnel/);
-    assert.match(html, /Ada Lovelace/);
-    const res = await fetch(`${url}/mark-sent/${personId}`, { method: "POST", redirect: "manual" });
-    assert.equal(res.status, 302);
+    assert.match(html, /data-token=/);
+    const res = await fetch(`${url}/api/mark-sent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Reach-Token": token },
+      body: JSON.stringify({ personId }),
+    });
+    assert.equal(res.status, 200);
     const db2 = openReachMigratedDb(cfg);
     const c = db2.prepare("SELECT status, sent_via FROM connection WHERE person_id = ?").get(personId);
     assert.equal(c.status, "sent");
     assert.equal(c.sent_via, "manual");
     db2.close();
   } finally {
-    await new Promise((resolve) => server.close(resolve));
+    server.closeAllConnections?.();
+    server.close();
   }
 });
 
-test("7. paused banner still allows mark-sent", () => {
-  const db = mem();
+test("7. paused state flows through /api/state and mark-sent still works", async () => {
   const fx = fixture();
   const cfg = loadReachConfig(fx);
-  pause(cfg, "test");
+  const db = openReachMigratedDb(cfg);
   const personId = seedQueued(db);
-  markInviteSent(db, personId);
-  const c = db.prepare("SELECT sent_via FROM connection WHERE person_id = ?").get(personId);
-  assert.equal(c.sent_via, "manual");
-  const html = renderDashboardHtml({
-    funnel: funnelCounts(db),
-    queue: todayQueue(db),
-    approvals: [],
-    people: [],
-    usage: { day: { invite: 0, linkedin_message: 0, email: 0 }, week: { invite: 0, linkedin_message: 0, email: 0 } },
-    limits: cfg.limits,
-    health: { acceptanceRate14d: null, bounceRate14d: null, halfTargets: false, emailPaused: false },
-    errors: [],
-    paused: true,
-  });
-  assert.match(html, /PAUSED/i);
   db.close();
+  pause(cfg, "test");
+  const { server, url, token } = await startReachUi(cfg, { port: 0, host: "127.0.0.1" });
+  try {
+    const st = await (await fetch(`${url}/api/state`)).json();
+    assert.equal(st.paused, true);
+    const res = await fetch(`${url}/api/mark-sent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Reach-Token": token },
+      body: JSON.stringify({ personId }),
+    });
+    assert.equal(res.status, 200);
+  } finally {
+    server.closeAllConnections?.();
+    server.close();
+  }
+  const db2 = openReachMigratedDb(cfg);
+  const c = db2.prepare("SELECT sent_via FROM connection WHERE person_id = ?").get(personId);
+  assert.equal(c.sent_via, "manual");
+  db2.close();
 });
 
 test("8. CLI usage lists reach ui", async () => {
   const fx = fixture();
   let out = "";
-  const code = await runReachCli([], { stdout: { write: (s) => { out += s; } }, ...fx });
+  const code = await runReachCli([], { stdout: { write: (s) => { out += String(s); } }, ...fx });
   assert.equal(code, 1);
   assert.match(out, /reach ui/);
 });
