@@ -12,6 +12,7 @@ import { openReachDb, MIGRATIONS_DIR } from "./db.mjs";
 import { withImap } from "./imap.mjs";
 import { isPaused } from "./killswitch.mjs";
 import { hasBskAck } from "./bsk-send.mjs";
+import { hasLocalGguf, hasLocalRuntime, localGgufPath, bundledLlamaPath } from "./local-llm.mjs";
 
 const MIN_NODE = [22, 13, 0];
 
@@ -46,7 +47,7 @@ const MAIL_GUIDANCE = "REACH_MAIL_USER/REACH_MAIL_PASSWORD unset (GMAIL_IMAP_USE
   + " — use a Gmail app password, not your login password: it requires 2-Step Verification,"
   + " and on Google Workspace your admin may disable app passwords entirely";
 
-export async function collectDoctorChecks({ profileFile, envFile, dataDir, skipMail = false, whichBsk } = {}) {
+export async function collectDoctorChecks({ profileFile, envFile, dataDir, skipMail = false, whichBsk, whichLlama } = {}) {
   const rows = [];
   const push = (ok, label, detail, warn = false) => rows.push({ ok, warn, label, detail });
   const envLookup = envLookupFrom(envFile ?? process.env.REACH_ENV_FILE);
@@ -134,6 +135,22 @@ export async function collectDoctorChecks({ profileFile, envFile, dataDir, skipM
     const present = Boolean(envLookup(key));
     push(true, label, present ? "set" : "provider disabled — quota 0", !present);
   }
+  const googleSet = Boolean(envLookup("GOOGLE_CSE_KEY") && envLookup("GOOGLE_CSE_ID"));
+  push(
+    true,
+    "google cse",
+    googleSet
+      ? "set — unattended/cron people search (no browser)"
+      : "unset — cron cannot fetch people; set GOOGLE_CSE_KEY + GOOGLE_CSE_ID (free) or Fetch from my LinkedIn in the console",
+    !googleSet,
+  );
+  const braveSet = Boolean(envLookup("BRAVE_API_KEY"));
+  push(
+    true,
+    "brave",
+    braveSet ? "set — fallback people search if Google CSE is unset" : "unset",
+    !braveSet && !googleSet,
+  );
 
   // 7: IMAP login probe — the only network call doctor ever makes
   if (skipMail || !mailConfigured) {
@@ -166,6 +183,23 @@ export async function collectDoctorChecks({ profileFile, envFile, dataDir, skipM
   }
   if (reachCfg && reachCfg.approvalMode !== "review") {
     push(true, "approval", `approval_mode=${reachCfg.approvalMode} — sample/auto is opt-in`, true);
+  }
+
+  if (reachCfg) {
+    if (hasLocalGguf(reachCfg)) {
+      push(true, "local llm", `Qwen 1.5B GGUF at ${localGgufPath(reachCfg)}`, false);
+    } else {
+      push(true, "local llm", "Qwen GGUF missing — run reach llm --pull (~1GB, ~1.5GB RAM)", true);
+    }
+    const runtimeOk = hasLocalRuntime(reachCfg, { whichImpl: whichLlama });
+    push(
+      true,
+      "local runtime",
+      runtimeOk
+        ? `llama-cli at ${existsSync(bundledLlamaPath(reachCfg)) ? bundledLlamaPath(reachCfg) : "PATH"}`
+        : "llama-cli missing — run reach llm --pull",
+      !runtimeOk,
+    );
   }
 
   return rows;

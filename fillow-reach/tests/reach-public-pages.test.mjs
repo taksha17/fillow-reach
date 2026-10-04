@@ -109,3 +109,12 @@ test("7. importPublicPage: robots.txt unreachable (fetch throws) is an allow", a
   assert.equal(out.imported, 1);
   db.close();
 });
+
+test("8. extractPeople splits a name from a trailing role in the same label", () => {
+  const rows = extractPeople(
+    '<a href="https://www.linkedin.com/in/karrisaarinen">Karri Saarinen Co-founder, CEO</a>',
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].full_name, "Karri Saarinen");
+  assert.match(rows[0].title, /Co-founder/i);
+});

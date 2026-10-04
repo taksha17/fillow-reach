@@ -28,6 +28,8 @@ import { run as runProspect } from "../../agents/reach-prospect.mjs";
 import { run as runOutreach } from "../../agents/reach-outreach.mjs";
 import { run as runContacts } from "../../agents/reach-contacts.mjs";
 import { importPublicPage } from "./public-pages.mjs";
+import { fetchLinkedInPeople } from "./linkedin-fetch.mjs";
+import { runDailyCycle } from "./run.mjs";
 
 const MAX_BODY_BYTES = 1024 * 1024;
 
@@ -196,6 +198,7 @@ export function consolePageHtml(token) {
 <main>
   <div id="flash" class="flash"></div>
   <div class="actions" id="actions">
+    <button class="btn-gold" data-run="daily" title="Runs today's full cycle: find people to invite, check the inbox, write drafts, archive events. Nothing is emailed or sent from this console.">Run today's cycle</button>
     <button class="btn-gold" data-run="prospect" title="Picks the best people to invite from the people you've added — ones who work at your target companies (max 15/day). Add people first under 'Add people'.">Find people to invite</button>
     <button class="btn-gold" data-run="outreach" title="Writes polite draft messages for accepted connections. Nothing is sent from this console.">Write draft messages</button>
     <button class="btn-gold" data-run="contacts" title="Reads your inbox: who accepted your invitations, bounced emails, and finds verified emails.">Check for acceptances</button>
@@ -232,7 +235,15 @@ export function consolePageHtml(token) {
   </section>
 
   <section id="tab-import">
-    <p class="muted"><strong>Fetch a public team page</strong> — paste a company's "Team"/"About" URL and the tool reads the public page (robots-aware; sites that refuse are skipped cleanly).</p>
+    <p class="muted"><strong>Fetch from my LinkedIn</strong> — interactive only: needs your logged-in browser (bsk). It cannot run from cron. For a daily unattended job, set <code>GOOGLE_CSE_KEY</code> + <code>GOOGLE_CSE_ID</code> and schedule <code>reach run</code> — that path never opens a browser.</p>
+    <div class="actions">
+      <input id="fetch-company" placeholder="company (empty = top target companies)" style="width:auto; flex:1">
+      <input id="fetch-keywords" placeholder="recruiter" style="width:10rem">
+      <button id="fetch-go" class="btn-gold" title="Opens an isolated browser window on your logged-in LinkedIn, reads the results, and stops. It never writes, likes, or sends.">Fetch from my LinkedIn</button>
+    </div>
+    <div id="fetch-result"></div>
+    <hr>
+    <p class="muted"><strong>Fetch a public team page</strong> — paste a company's "Team"/"About" URL and the tool reads the public page (robots-aware; sites that refuse are skipped cleanly). Most marketing sites are JavaScript-only and will return nobody — use LinkedIn fetch above for those.</p>
     <div class="actions">
       <input id="page-url" placeholder="https://company.example/team" style="width:auto; flex:1">
       <button id="page-go" class="btn-gold" title="Reads the public web page; never logs in, never sends anything.">Fetch team page</button>
@@ -287,7 +298,7 @@ function renderStatus() {
       b.appendChild(row);
     };
     step(1, "Load your job list (data/jobs.tsv)", d.targets.length > 0);
-    step(2, "Add people — fetch a company's team page, paste a LinkedIn search page, or import your Connections.csv  (under \u201cAdd people\u201d)", false);
+    step(2, "Add people — press \u201cFetch from my LinkedIn\u201d under \u201cAdd people\u201d (or paste / fetch a team page / import Connections.csv)", false);
     step(3, "Press \u201cFind people to invite\u201d", false);
     const gap = tr([td(""), td("")]);
     gap.children[1].textContent = "\u2014 your details below \u2014";
@@ -421,6 +432,7 @@ document.querySelectorAll("#tabs button").forEach((t) => {
 });
 
 const runDoneText = {
+  daily: "Today's cycle finished — review drafts under \u201cMessages to review\u201d",
   prospect: "Invite list updated",
   outreach: "Drafts written — review them under \u201cMessages to review\u201d",
   contacts: "Inbox checked — acceptances and bounces recorded",
@@ -432,7 +444,7 @@ function runFlash(agent, r) {
   if (agent === "prospect" && r.stats) {
     if (r.stats.queued > 0) return "Added " + r.stats.queued + " " + (r.stats.queued === 1 ? "person" : "people") + " to \u201cInvites to send\u201d";
     if (r.stats.targets > 0 && STATE && STATE.people.length === 0) {
-      return "No one to invite yet — your people list is empty. Open \u201cAdd people\u201d and paste a LinkedIn search results page (or import your Connections.csv), then press this again.";
+      return "No one to invite yet. For a one-off fetch: Add people \u2192 Fetch from my LinkedIn. For cron: set GOOGLE_CSE_KEY + GOOGLE_CSE_ID, then this button (and reach run) searches Google's index — no browser.";
     }
     if (r.stats.targets > 0) return "No new invites — everyone currently on your list is already invited, blocked, or not relevant enough yet.";
     return "No job targets found — add a jobs.tsv to data/ so the tool knows which companies matter to you.";
@@ -454,6 +466,26 @@ document.querySelectorAll("#actions button[data-run]").forEach((b) => {
 
 $("toggle-pause").onclick = async () => {
   try { await post(STATE.paused ? "/api/resume" : "/api/pause"); flash(STATE.paused ? "resumed" : "paused — nothing sends", "ok"); refresh(); } catch { }
+};
+
+$("fetch-go").onclick = async () => {
+  const btn = $("fetch-go");
+  btn.disabled = true;
+  $("fetch-result").textContent = "Working — a browser window may flash open; that's the fetch running (read-only).";
+  try {
+    const r = await post("/api/fetch", { company: $("fetch-company").value.trim() || null, keywords: $("fetch-keywords").value.trim() || "recruiter" });
+    if (r.reason === "not_logged_in") {
+      $("fetch-result").textContent = "LinkedIn asked for a login. Log into LinkedIn in your normal browser, then press this again.";
+      flash("LinkedIn isn't logged in — see the note under the button", "err");
+    } else {
+      const parts = (r.results || []).map((x) => x.company + ": " + x.imported + (x.skipped ? " (" + x.skipped + " skipped)" : "")).join(" · ");
+      const total = "Fetched " + r.imported + (r.imported === 1 ? " person" : " people");
+      $("fetch-result").textContent = total + (parts ? " — " + parts : "") + (r.imported ? ". Now press \u201cFind people to invite\u201d up top." : ". Nothing matched — try a different company or search words.");
+      flash(total, r.imported ? "ok" : "err");
+    }
+    refresh();
+  } catch { /* flash shown */ }
+  btn.disabled = false;
 };
 
 $("page-go").onclick = async () => {
@@ -515,7 +547,7 @@ setInterval(refresh, 5000);
 </body></html>`;
 }
 
-export function startReachUi(reachCfg, { port = 4181, host = "127.0.0.1", fetchImpl = null } = {}) {
+export function startReachUi(reachCfg, { port = 4181, host = "127.0.0.1", fetchImpl = null, linkedinDriver = null } = {}) {
   const token = randomBytes(24).toString("hex");
   let busy = false;
 
@@ -527,7 +559,7 @@ export function startReachUi(reachCfg, { port = 4181, host = "127.0.0.1", fetchI
   async function runAgent(agent) {
     if (agent === "prospect") {
       const r = await runProspect(reachCfg, { emit: () => {} });
-      return { agent, stats: { targets: r.targets, queued: r.queued, skipped: r.skipped } };
+      return { agent, stats: { targets: r.targets, queued: r.queued, skipped: r.skipped, discovery: r.discovery } };
     }
     if (agent === "outreach") {
       const r = await runOutreach(reachCfg, { compose: true, send: false, emit: () => {} });
@@ -546,6 +578,10 @@ export function startReachUi(reachCfg, { port = 4181, host = "127.0.0.1", fetchI
       } finally {
         db.close();
       }
+    }
+    if (agent === "daily") {
+      const r = await runDailyCycle(reachCfg, { send: false, emit: () => {} });
+      return { agent, stats: r, text: r.errors.length ? r.errors.map((e) => `${e.agent}: ${e.error}`).join("; ") : "" };
     }
     throw new Error(`unknown agent: ${agent}`);
   }
@@ -670,6 +706,39 @@ export function startReachUi(reachCfg, { port = 4181, host = "127.0.0.1", fetchI
             markInviteSent(db, Number(body.personId));
             send(200, { ok: true });
           } finally {
+            db.close();
+          }
+          return;
+        }
+
+        if (u.pathname === "/api/fetch") {
+          if (busy) { send(409, { error: "a run is already in progress" }); return; }
+          busy = true;
+          const db = openReachMigratedDb(reachCfg);
+          try {
+            let companies = [];
+            const named = String(body.company ?? "").trim();
+            if (named) {
+              companies = [named];
+            } else {
+              companies = db.prepare(
+                "SELECT c.name FROM company c JOIN target_role t ON t.company_id=c.id GROUP BY c.id ORDER BY COUNT(t.id) DESC LIMIT 10",
+              ).all().map((r) => r.name);
+            }
+            if (!companies.length) { send(400, { error: "no target companies — sync a jobs.tsv first (Find people to invite) or name a company" }); return; }
+            const keywords = String(body.keywords ?? "").trim() || "recruiter";
+            const results = [];
+            let imported = 0, skipped = 0, lastReason = null;
+            const driverOpts = linkedinDriver ? { driver: linkedinDriver } : {};
+            for (const company of companies) {
+              const r = await fetchLinkedInPeople(db, reachCfg, { company, keywords, limit: 12, ...driverOpts });
+              results.push({ company, ...r });
+              imported += r.imported; skipped += r.skipped;
+              if (r.reason === "not_logged_in") { lastReason = r.reason; break; }
+            }
+            send(200, { imported, skipped, reason: lastReason, results });
+          } finally {
+            busy = false;
             db.close();
           }
           return;

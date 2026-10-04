@@ -15,6 +15,9 @@ import { approveAllGrounded, approveDraft, listPendingApproval, preview } from "
 import { run as runOutreach } from "../../agents/reach-outreach.mjs";
 import { startReachUi } from "./ui.mjs";
 import { reportDate, buildDailyReport, renderReportText, sendDailyReport } from "./report.mjs";
+import { runDailyCycle } from "./run.mjs";
+import { localLlmStatus, pullLocalLlm, pullLocalRuntime, makeLocalChat } from "./local-llm.mjs";
+import { fetchLinkedInPeople } from "./linkedin-fetch.mjs";
 
 // Commands registered by later tasks (send/approve/report/...) append a row
 // here: { name, summary, run(args, ctx) }. ctx = { cfg, openDb, out }.
@@ -22,11 +25,12 @@ import { reportDate, buildDailyReport, renderReportText, sendDailyReport } from 
 export const commands = [
   { name: "status", summary: "usage vs caps, queue sizes, health", run: statusCmd },
   { name: "doctor", summary: "config/migrations/mailbox/keys checks (--no-mail)", run: doctorCmd, raw: true },
-  { name: "setup", summary: "guided onboarding wizard (PRD §9a)", run: setupCmd, raw: true },
+  { name: "setup", summary: "guided onboarding wizard (--ack-bsk, --pull-llm)", run: setupCmd, raw: true },
   { name: "pause", summary: "halt all sends — drop a PAUSE kill-switch file", run: pauseCmd },
   { name: "resume", summary: "remove the PAUSE kill-switch file", run: resumeCmd },
   { name: "migrate", summary: "apply pending sqlite migrations", run: migrateCmd },
   { name: "import", summary: "Connections.csv or --paste text (review-first; --yes to write)", run: importCmd },
+  { name: "fetch", summary: "fetch people from your LinkedIn (logged-in browser, read-only)", run: fetchCmd },
   { name: "prospect", summary: "sync targets + sources, build capped invite queue", run: prospectCmd },
   { name: "contacts", summary: "detect acceptances/bounces and enrich emails", run: contactsCmd },
   { name: "suppress", summary: "add email, LinkedIn URL, or domain to do-not-contact", run: suppressCmd },
@@ -35,6 +39,8 @@ export const commands = [
   { name: "approve", summary: "review drafts (--all-grounded); M3 is review-only", run: approveCmd },
   { name: "ui", summary: "local end-to-end console on 127.0.0.1:4181", run: uiCmd },
   { name: "report", summary: "build the daily digest (--send to email it)", run: reportCmd },
+  { name: "run", summary: "full daily cycle: prospect → contacts → drafts → JSONL", run: runCycleCmd },
+  { name: "llm", summary: "local Qwen status / --pull / --test", run: llmCmd },
 ];
 
 // Planned but unregistered: shown in help so the surface is discoverable.
@@ -156,10 +162,56 @@ async function importCmd(args, ctx) {
   return 0;
 }
 
+// `reach fetch [company] [--keywords "..."] [--limit N]` — read-only people
+// fetch through the user's logged-in browser (bsk Agent Window). No company →
+// the top target companies first (cap 10 per run, one at a time).
+async function fetchCmd(args, ctx) {
+  const { cfg, out } = ctx;
+  const taken = new Set();
+  const opt = (name) => {
+    const i = args.indexOf(name);
+    if (i === -1) return undefined;
+    taken.add(i);
+    taken.add(i + 1);
+    return args[i + 1];
+  };
+  const keywords = opt("--keywords");
+  const limit = Number(opt("--limit") ?? 12);
+  args.forEach((a, i) => { if (a.startsWith("--")) taken.add(i); });
+  const named = args.filter((_, i) => !taken.has(i));
+  let companies = [];
+  if (named.length) {
+    companies = named;
+  } else {
+    const db = ctx.openDb();
+    companies = db.prepare(
+      "SELECT c.name FROM company c JOIN target_role t ON t.company_id=c.id GROUP BY c.id ORDER BY COUNT(t.id) DESC LIMIT 10",
+    ).all().map((r) => r.name);
+  }
+  if (!companies.length) { out("no target companies — sync a jobs.tsv first (reach prospect) or pass a company"); return 1; }
+  let imported = 0;
+  let skipped = 0;
+  for (const company of companies) {
+    const db = ctx.openDb();
+    const res = await fetchLinkedInPeople(db, cfg, { company, keywords: keywords ?? "recruiter", limit });
+    imported += res.imported;
+    skipped += res.skipped;
+    out(`${company}: imported ${res.imported}${res.skipped ? `, skipped ${res.skipped}` : ""}${res.reason ? `, ${res.reason}` : ""}`);
+    if (res.reason === "not_logged_in") break;
+  }
+  out(`fetched ${imported} people${skipped ? ` (${skipped} skipped)` : ""} across ${companies.length} companies`);
+  return 0;
+}
+
 async function prospectCmd(_args, ctx) {
   const { cfg, out } = ctx;
   const res = await runProspect(cfg, { emit: () => {} });
   out(`targets synced: ${res.targets} · invites queued: ${res.queued}${res.skipped ? ` · held back: ${res.skipped}` : ""}`);
+  if (res.discovery?.reason === "no_key") {
+    out("people search skipped — set GOOGLE_CSE_KEY and GOOGLE_CSE_ID for cron (bsk is interactive-only)");
+  } else if (res.discovery?.searched) {
+    out(`people search: ${res.discovery.provider} · searched ${res.discovery.searched} · imported ${res.discovery.imported}`);
+  }
   return 0;
 }
 
@@ -313,6 +365,63 @@ async function reportCmd(args, ctx) {
     const r = await sendDailyReport(db, cfg, { now: new Date(), dryRun: cfg.dryRun });
     out(r.status === "sent" ? `sent report ${r.date}` : `dry-run: report built, not sent (${r.date})`);
   }
+  return 0;
+}
+
+async function runCycleCmd(args, ctx) {
+  const { cfg, out } = ctx;
+  const send = args.includes("--send");
+  const stats = await runDailyCycle(cfg, { send });
+  if (args.includes("--json")) {
+    out(JSON.stringify(stats));
+    return stats.errors.length ? 1 : 0;
+  }
+  const p = stats.prospect ?? {};
+  const c = stats.contacts ?? {};
+  const o = stats.outreach ?? {};
+  out(`run: targets ${p.targets ?? 0} · queued ${p.queued ?? 0} · accepted ${c.accepted ?? 0} · drafted ${o.composed ?? 0} (${o.grounded ?? 0} grounded)`);
+  if (p.discovery?.reason === "no_key") {
+    out("people search skipped — set GOOGLE_CSE_KEY and GOOGLE_CSE_ID for unattended/cron fetch (bsk LinkedIn fetch is interactive-only)");
+  } else if (p.discovery?.searched) {
+    out(`people search: ${p.discovery.provider} · ${p.discovery.searched} compan${p.discovery.searched === 1 ? "y" : "ies"} · imported ${p.discovery.imported}`);
+  }
+  if (stats.jsonl) out(`jsonl: ${stats.jsonl.written} event(s) → ${stats.jsonl.path}`);
+  if (stats.report?.status === "built") out(`report built for ${stats.report.date} (not emailed)`);
+  if (stats.report?.status === "sent") out(`report emailed for ${stats.report.date}`);
+  if (cfg.dryRun) out("DRY RUN — nothing was sent. Pass --send only after reviewing drafts AND setting dry_run: false.");
+  if (send && cfg.dryRun) out("(--send ignored while dry_run is true)");
+  for (const e of stats.errors) out(`${e.agent} failed: ${e.error}`);
+  out("review drafts: reach approve   · console: reach ui");
+  return stats.errors.length ? 1 : 0;
+}
+
+async function llmCmd(args, ctx) {
+  const { cfg, out } = ctx;
+  const force = args.includes("--force");
+  if (args.includes("--pull")) {
+    const dest = await pullLocalLlm(cfg, { force });
+    out(`wrote ${dest}`);
+    try {
+      const bin = await pullLocalRuntime(cfg, { force });
+      out(`runtime ${bin}`);
+    } catch (err) {
+      out(`runtime skip: ${err.message}`);
+    }
+    return 0;
+  }
+  if (args.includes("--test")) {
+    const text = await makeLocalChat(cfg)("Reply with JSON only: {\"ok\": true}", "ping");
+    out(text);
+    return 0;
+  }
+  const status = localLlmStatus(cfg);
+  if (args.includes("--json")) {
+    out(JSON.stringify(status));
+    return 0;
+  }
+  out(`local Qwen (${status.model})`);
+  out(`  gguf     ${status.gguf.present ? status.gguf.path : "missing — reach llm --pull"}`);
+  out(`  runtime  ${status.runtime.bundled ? status.runtime.path : (status.runtime.present ? "PATH" : "missing — reach llm --pull")}`);
   return 0;
 }
 

@@ -170,3 +170,43 @@ test("8. prospect pulls people from Google CSE when GOOGLE_CSE_KEY/ID are set", 
   assert.equal(p.source, "public_page");
   db2.close();
 });
+
+test("9. without search keys, discovery.reason is no_key and no provider is called", async () => {
+  const { cfg } = fixture();
+  let calls = 0;
+  const out = await run(cfg, {
+    jobs: JOBS,
+    fetchImpl: async () => { calls += 1; return res(200, "{}"); },
+  });
+  assert.equal(out.discovery.reason, "no_key");
+  assert.equal(out.discovery.searched, 0);
+  assert.equal(calls, 0);
+});
+
+test("10. Google CSE searches at most invitesPerDay companies (cron-safe; never bsk)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "reach-google-budget-"));
+  const profileFile = join(dir, "profile.yaml");
+  const envFile = join(dir, ".env");
+  writeFileSync(profileFile, "reach:\n  enabled: true\n", "utf8");
+  writeFileSync(envFile, "GOOGLE_CSE_KEY=gs-key\nGOOGLE_CSE_ID=gs-cx\n", "utf8");
+  const cfg = loadReachConfig({ profileFile, envFile, dataDir: join(dir, "data") });
+  const jobs = Array.from({ length: 20 }, (_, i) => ({
+    source: "greenhouse",
+    external_id: `g-${i}`,
+    title: "Recruiter",
+    company: `Co${i}`,
+    status: "ready",
+  }));
+  let googleCalls = 0;
+  const fetchImpl = async (u) => {
+    if (String(u).includes("googleapis.com/customsearch")) {
+      googleCalls += 1;
+      return { ok: true, status: 200, json: async () => ({ items: [] }) };
+    }
+    return { ok: true, status: 200, json: async () => ({ people: [] }) };
+  };
+  const out = await run(cfg, { fetchImpl, jobs });
+  assert.equal(out.discovery.provider, "google");
+  assert.equal(out.discovery.searched, cfg.limits.invitesPerDay);
+  assert.equal(googleCalls, cfg.limits.invitesPerDay);
+});

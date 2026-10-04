@@ -58,7 +58,7 @@ test("1. console page renders with embedded token and pipeline tabs", async () =
   const fetch = (p, o) => globalThis.fetch(`${url}${p}`, o);
   const page = await text(fetch, "/");
   assert.equal(page.status, 200);
-  for (const marker of ["fillow Reach", "data-token", "Overview", "Invites to send", "Messages to review", "People", "Job targets", "History", "Add people", "Find people to invite", "Pause everything"]) {
+  for (const marker of ["fillow Reach", "data-token", "Overview", "Invites to send", "Messages to review", "People", "Job targets", "History", "Add people", "Find people to invite", "Pause everything", "Run today's cycle", "Fetch from my LinkedIn"]) {
     assert.ok(page.body.includes(marker), `missing ${marker}`);
   }
   assert.ok(token && token.length >= 16);
@@ -299,6 +299,58 @@ test("13. /api/fetch-page imports a public team page via injected fetchImpl", as
     const row = db.prepare("SELECT full_name, title, source FROM person WHERE full_name='Jane Doe'").get();
     assert.equal(row.title, "Senior Recruiter");
     assert.equal(row.source, "public_page");
+    db.close();
+  } finally {
+    stop(server);
+  }
+});
+
+test("14. run action: daily executes the full cycle and reports stats", async () => {
+  const fx = fixture();
+  const { server, url, token } = await start(fx);
+  const fetch = (p, o) => globalThis.fetch(`${url}${p}`, o);
+  const post = (path, payload) => fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Reach-Token": token },
+    body: JSON.stringify(payload),
+  });
+  try {
+    const res = await post("/api/run", { agent: "daily" });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.agent, "daily");
+    assert.ok(body.stats && Array.isArray(body.stats.errors), JSON.stringify(body));
+    assert.equal(body.stats.dryRun, true);
+    assert.equal(body.stats.sent, false);
+    const { body: state } = await json(fetch, "/api/state");
+    assert.equal(state.busy, false);
+  } finally {
+    stop(server);
+  }
+});
+
+test("15. /api/fetch imports LinkedIn people through a stub driver", async () => {
+  const fx = fixture();
+  const html = `
+    <a href="https://www.linkedin.com/in/jane-doe"><span aria-hidden="true">Jane Doe</span></a>
+    <div class="entity-result__primary-subtitle">Technical Recruiter at Acme</div>
+  `;
+  const { server, url, token } = await start(fx, { linkedinDriver: async () => html });
+  const fetch = (p, o) => globalThis.fetch(`${url}${p}`, o);
+  const post = (path, payload) => fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Reach-Token": token },
+    body: JSON.stringify(payload),
+  });
+  try {
+    const res = await post("/api/fetch", { company: "acme", keywords: "recruiter" });
+    assert.equal(res.status, 200, await res.clone().text());
+    const body = await res.json();
+    assert.equal(body.imported, 1, JSON.stringify(body));
+    const db = openReachMigratedDb(fx.cfg);
+    const row = db.prepare("SELECT full_name, source, persona FROM person WHERE full_name='Jane Doe'").get();
+    assert.equal(row.source, "linkedin_search");
+    assert.equal(row.persona, "recruiter");
     db.close();
   } finally {
     stop(server);

@@ -1,22 +1,21 @@
-# TASK — M5 optional (bsk, approval ramp, health apply)
+# TASK — production-ready daily cycle + local Qwen
 
-M1–M4 are on `main`. This merge lands **M5**. Defaults stay `send_mode: queue` and `approval_mode: review`. No anti-bot evasion.
+M0–M5 are on `main`. This branch finishes the shipped product:
 
-**Full plan:** `fillow-reach/docs/plans/2026-10-02-fillow-reach-m5.md`
-**Spec:** PRD R1-6/R1-7, R3-7, §7 health guard, §14 M5
+- PRD §9 `reach run` (prospect → contacts → outreach compose → JSONL → report)
+- Console **Run today's cycle** (compose only; no send from the UI)
+- Optional local Qwen 2.5 1.5B (`reach llm --pull`) folded from PR #6
+- Install/docs: README, onboarding, `package.json` 1.0.0, CI
+
+**Spec:** PRD §9 CLI `run`, R1–R4 already on main.
+**Do not merge to `main` until the live trial is done.**
 
 ## Done when
 
-- bsk path requires `data/reach/BSK_ACK`; warning/captcha → PAUSE
-- `sample` / `auto` after N clean approvals; grounding failure demotes (event, do not rewrite profile.yaml)
-- `healthGuard.halfTargets` / `emailPaused` applied at send time
-
-## Tasks (TDD)
-
-1. bsk-send + auto-pause (injectable bskImpl)
-2. approval-ramp
-3. assertSendAllowedHealthy
-4. doctor warn rows for bsk ack / binary
+- `reach run --json` exits 0 on an empty DB; `--send` is ignored while `dry_run`
+- UI button `data-run=daily` calls the same runner
+- Hosted LLM first, then local GGUF; doctor rows `local llm` / `local runtime`
+- Full `tests/*.mjs` green
 
 ## Test
 
@@ -25,4 +24,4 @@ cd fillow-reach
 node --disable-warning=ExperimentalWarning --test tests/*.mjs
 ```
 
-Never `npm test`. Fake identities only. All new files under `fillow-reach/`.
+Never `npm test` on the fillow machine. Fake identities only.
