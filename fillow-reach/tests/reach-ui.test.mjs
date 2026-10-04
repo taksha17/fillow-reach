@@ -37,8 +37,8 @@ function rawStatus(port, path, headers) {
   });
 }
 
-async function start(fx) {
-  const handle = await startReachUi(fx.cfg, { host: "127.0.0.1", port: 0 });
+async function start(fx, extra = {}) {
+  const handle = await startReachUi(fx.cfg, { host: "127.0.0.1", port: 0, ...extra });
   return handle;
 }
 
@@ -264,6 +264,42 @@ test("12. console page references the logo in header and favicon", async () => {
     assert.equal(page.status, 200);
     assert.ok(page.body.includes('src="/logo.png"'), "header logo <img> missing");
     assert.ok(page.body.includes('rel="icon" href="/logo.png"'), "favicon link missing");
+  } finally {
+    stop(server);
+  }
+});
+
+test("13. /api/fetch-page imports a public team page via injected fetchImpl", async () => {
+  const fx = fixture();
+  const teamHtml = [
+    "<html><body>",
+    '<h2 itemprop="name">Jane Doe</h2>',
+    '<p itemprop="jobTitle">Senior Recruiter</p>',
+    '<a href="https://www.linkedin.com/in/janedoe">profile</a>',
+    "</body></html>",
+  ].join("\n");
+  const stub = async (u) => u.endsWith("/robots.txt")
+    ? { ok: true, status: 200, text: async () => "User-agent: *\nAllow: /\n" }
+    : { ok: true, status: 200, text: async () => teamHtml };
+  const { server, url, token } = await start(fx, { fetchImpl: stub });
+  const fetch = (p, o) => globalThis.fetch(`${url}${p}`, o);
+  const post = (path, payload) => fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Reach-Token": token },
+    body: JSON.stringify(payload),
+  });
+  try {
+    const bad = await post("/api/fetch-page", { url: "not-a-url" });
+    assert.equal(bad.status, 400);
+    const res = await post("/api/fetch-page", { url: "https://acme.test/team" });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.imported, 1, JSON.stringify(body));
+    const db = openReachMigratedDb(fx.cfg);
+    const row = db.prepare("SELECT full_name, title, source FROM person WHERE full_name='Jane Doe'").get();
+    assert.equal(row.title, "Senior Recruiter");
+    assert.equal(row.source, "public_page");
+    db.close();
   } finally {
     stop(server);
   }

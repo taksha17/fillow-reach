@@ -27,6 +27,7 @@ import { buildDailyReport, renderReportText, reportDate } from "./report.mjs";
 import { run as runProspect } from "../../agents/reach-prospect.mjs";
 import { run as runOutreach } from "../../agents/reach-outreach.mjs";
 import { run as runContacts } from "../../agents/reach-contacts.mjs";
+import { importPublicPage } from "./public-pages.mjs";
 
 const MAX_BODY_BYTES = 1024 * 1024;
 
@@ -231,7 +232,14 @@ export function consolePageHtml(token) {
   </section>
 
   <section id="tab-import">
-    <p class="muted">Paste LinkedIn search results or a company team page's text below. You'll see a preview before anything is saved.</p>
+    <p class="muted"><strong>Fetch a public team page</strong> — paste a company's "Team"/"About" URL and the tool reads the public page (robots-aware; sites that refuse are skipped cleanly).</p>
+    <div class="actions">
+      <input id="page-url" placeholder="https://company.example/team" style="width:auto; flex:1">
+      <button id="page-go" class="btn-gold" title="Reads the public web page; never logs in, never sends anything.">Fetch team page</button>
+    </div>
+    <div id="page-result"></div>
+    <hr>
+    <p class="muted">Or paste LinkedIn search results / a company team page's text below. You'll see a preview before anything is saved.</p>
     <textarea id="paste-text" placeholder="Jane Doe — Technical Recruiter at Acme&#10;https://www.linkedin.com/in/jane-doe"></textarea>
     <div class="actions" style="margin-top:.5rem">
       <button id="paste-preview" class="btn-ghost">Preview</button>
@@ -279,7 +287,7 @@ function renderStatus() {
       b.appendChild(row);
     };
     step(1, "Load your job list (data/jobs.tsv)", d.targets.length > 0);
-    step(2, "Add people — paste a LinkedIn search results page under \u201cAdd people\u201d, or import your LinkedIn Connections.csv", false);
+    step(2, "Add people — fetch a company's team page, paste a LinkedIn search page, or import your Connections.csv  (under \u201cAdd people\u201d)", false);
     step(3, "Press \u201cFind people to invite\u201d", false);
     const gap = tr([td(""), td("")]);
     gap.children[1].textContent = "\u2014 your details below \u2014";
@@ -448,6 +456,33 @@ $("toggle-pause").onclick = async () => {
   try { await post(STATE.paused ? "/api/resume" : "/api/pause"); flash(STATE.paused ? "resumed" : "paused — nothing sends", "ok"); refresh(); } catch { }
 };
 
+$("page-go").onclick = async () => {
+  const btn = $("page-go");
+  const url = $("page-url").value.trim();
+  if (!url) return;
+  btn.disabled = true;
+  $("page-result").textContent = "Reading the page…";
+  try {
+    const r = await post("/api/fetch-page", { url });
+    if (r.reason === "blocked") {
+      $("page-result").textContent = "That page refused visitors — try pasting its text in the box below instead.";
+      flash("page blocked", "err");
+    } else if (r.reason === "not_found") {
+      $("page-result").textContent = "No page there (404). Check the URL.";
+      flash("page not found", "err");
+    } else if (r.imported > 0) {
+      $("page-result").textContent = "Saved " + r.imported + (r.imported === 1 ? " person" : " people") + (r.skipped ? " (" + r.skipped + " blocked/duplicates skipped)" : "") + ". Now press \u201cFind people to invite\u201d up top.";
+      flash("saved", "ok");
+      $("page-url").value = "";
+    } else {
+      $("page-result").textContent = "No people's names found on that page — it may be a JS-heavy site. Paste its text in the box below instead.";
+      flash("nothing found", "err");
+    }
+    refresh();
+  } catch { /* flash shown */ }
+  btn.disabled = false;
+};
+
 $("paste-preview").onclick = async () => {
   const text = $("paste-text").value;
   if (!text.trim()) return;
@@ -480,7 +515,7 @@ setInterval(refresh, 5000);
 </body></html>`;
 }
 
-export function startReachUi(reachCfg, { port = 4181, host = "127.0.0.1" } = {}) {
+export function startReachUi(reachCfg, { port = 4181, host = "127.0.0.1", fetchImpl = null } = {}) {
   const token = randomBytes(24).toString("hex");
   let busy = false;
 
@@ -635,6 +670,22 @@ export function startReachUi(reachCfg, { port = 4181, host = "127.0.0.1" } = {})
             markInviteSent(db, Number(body.personId));
             send(200, { ok: true });
           } finally {
+            db.close();
+          }
+          return;
+        }
+
+        if (u.pathname === "/api/fetch-page") {
+          if (busy) { send(409, { error: "a run is already in progress" }); return; }
+          const url = String(body.url ?? "").trim();
+          if (!/^https?:\/\//i.test(url)) { send(400, { error: "paste a full page URL (https://company.example/team)" }); return; }
+          busy = true;
+          const db = openReachMigratedDb(reachCfg);
+          try {
+            const r = await importPublicPage(db, url, { fetchImpl: fetchImpl ?? undefined });
+            send(200, r);
+          } finally {
+            busy = false;
             db.close();
           }
           return;
