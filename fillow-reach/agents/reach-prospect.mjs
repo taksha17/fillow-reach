@@ -1,6 +1,7 @@
 import { openReachMigratedDb, recordEvent } from "../lib/reach/db.mjs";
 import { syncTargets } from "../lib/reach/targets.mjs";
 import { searchPeople } from "../lib/reach/provider-people-search.mjs";
+import { fetchBravePeople } from "../lib/reach/provider-brave.mjs";
 import { upsertCompany, upsertPerson } from "../lib/reach/people.mjs";
 import { queueDaily } from "../lib/reach/queue.mjs";
 
@@ -35,6 +36,13 @@ export async function run(cfg, { emit = () => {}, jobs, fetchImpl, cooldown = ne
           });
         } catch { /* bad draft, skip */ }
       }
+      // Brave syndication path: LinkedIn objects from the public index — no
+      // session, no key'd provider quota. Only when the user set BRAVE_API_KEY.
+      try {
+        if (cfg.enrichment.braveKey && !cooldown.has("brave")) {
+          await fetchBravePeople(db, cfg, { company: c.name, fetchImpl, cooldown });
+        }
+      } catch { /* provider failure never blocks the batch */ }
     }
 
     const q = queueDaily(db, cfg);

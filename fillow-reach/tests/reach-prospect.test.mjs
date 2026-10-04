@@ -106,3 +106,35 @@ test("6. CLI prospect: exit 0, prints queued count", async () => {
   assert.equal(code, 0, out);
   assert.ok(/queued/i.test(out), out);
 });
+
+test("7. prospect pulls people from Brave when BRAVE_API_KEY is set (no browser session)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "reach-brave-prospect-"));
+  const profileFile = join(dir, "profile.yaml");
+  const envFile = join(dir, ".env");
+  writeFileSync(profileFile, "reach:\n  enabled: true\n", "utf8");
+  writeFileSync(envFile, "BRAVE_API_KEY=bk-test\n", "utf8");
+  const cfg = loadReachConfig({ profileFile, envFile, dataDir: join(dir, "data") });
+  const braveFixture = {
+    web: { results: [{
+      title: "Ada Recruit - Technical Recruiter at airbnb | LinkedIn",
+      url: "https://www.linkedin.com/in/adarecruit",
+      description: "Technical Recruiter at airbnb.",
+    }] },
+  };
+  let braveCalls = 0;
+  const fetchImpl = async (u) => {
+    if (String(u).includes("brave")) { braveCalls += 1; return { ok: true, status: 200, json: async () => braveFixture }; }
+    return { ok: true, status: 200, json: async () => ({ people: [] }) };
+  };
+  const out = await run(cfg, {
+    fetchImpl,
+    jobs: [{ source: "greenhouse", external_id: "g-1", title: "Recruiter", company: "airbnb", status: "ready" }],
+  });
+  assert.ok(braveCalls >= 1);
+  assert.ok(out.queued >= 1, JSON.stringify(out));
+  const db2 = openReachMigratedDb(cfg);
+  const p = db2.prepare("SELECT full_name, persona, source FROM person WHERE full_name='Ada Recruit'").get();
+  assert.equal(p.persona, "recruiter");
+  assert.equal(p.source, "public_page");
+  db2.close();
+});

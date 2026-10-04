@@ -42,6 +42,8 @@ sent until you change that yourself in your profile.
 | **Your job list** | Put a `jobs.tsv` in `data/` (one row per job you're pursuing; `status` ready/applied are kept) | The tool prefers inviting people who work at companies you're applying to. Without this, the invite list stays mostly empty by design. |
 | **Your existing network** | LinkedIn → Settings → Get a copy of your data → export, then `node bin/reach.mjs import Connections.csv --yes` | Marks everyone you already know as connected so you never invite them. |
 | **New people** | UI → **Add people** tab: paste a LinkedIn search results page → Preview → Save. Or `reach import --paste`. | This is how new prospects enter the list. |
+| **Public team pages** | UI → **Add people** tab: paste a company Team/About URL → Fetch team page. | Robots-aware; sites that refuse are skipped cleanly. |
+| **Auto-search (optional)** | Put `BRAVE_API_KEY=…` in `.env` (free 2k/mo at brave.com/search/api), then just press **Find people to invite** — each run searches LinkedIn's public index per target company | No browser, no LinkedIn session, no key'd provider needed. Hunter/Apollo keys work the same way when you have them. |
 
 ## 2. The daily loop
 

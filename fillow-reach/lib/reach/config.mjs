@@ -294,6 +294,7 @@ export function loadReachConfig({ profileFile, envFile, dataDir } = {}) {
       },
       hunterKey: envLookup("HUNTER_API_KEY"),
       apolloKey: envLookup("APOLLO_API_KEY"),
+      braveKey: envLookup("BRAVE_API_KEY"),
     },
     health: {
       minAcceptance: merged.health.min_acceptance,
