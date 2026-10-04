@@ -138,3 +138,35 @@ test("7. prospect pulls people from Brave when BRAVE_API_KEY is set (no browser 
   assert.equal(p.source, "public_page");
   db2.close();
 });
+
+test("8. prospect pulls people from Google CSE when GOOGLE_CSE_KEY/ID are set", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "reach-google-prospect-"));
+  const profileFile = join(dir, "profile.yaml");
+  const envFile = join(dir, ".env");
+  writeFileSync(profileFile, "reach:\n  enabled: true\n", "utf8");
+  writeFileSync(envFile, "GOOGLE_CSE_KEY=gs-key\nGOOGLE_CSE_ID=gs-cx\n", "utf8");
+  const cfg = loadReachConfig({ profileFile, envFile, dataDir: join(dir, "data") });
+  const googleFixture = {
+    items: [{
+      title: "Ada Recruit - Technical Recruiter at airbnb | LinkedIn",
+      link: "https://www.linkedin.com/in/adarecruit",
+      snippet: "...",
+    }],
+  };
+  let googleCalls = 0;
+  const fetchImpl = async (u) => {
+    if (String(u).includes("googleapis.com/customsearch")) { googleCalls += 1; return { ok: true, status: 200, json: async () => googleFixture }; }
+    return { ok: true, status: 200, json: async () => ({ people: [] }) };
+  };
+  const out = await run(cfg, {
+    fetchImpl,
+    jobs: [{ source: "greenhouse", external_id: "g-1", title: "Recruiter", company: "airbnb", status: "ready" }],
+  });
+  assert.ok(googleCalls >= 1);
+  assert.ok(out.queued >= 1, JSON.stringify(out));
+  const db2 = openReachMigratedDb(cfg);
+  const p = db2.prepare("SELECT full_name, persona, source FROM person WHERE full_name='Ada Recruit'").get();
+  assert.equal(p.persona, "recruiter");
+  assert.equal(p.source, "public_page");
+  db2.close();
+});

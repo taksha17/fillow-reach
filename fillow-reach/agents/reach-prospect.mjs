@@ -2,6 +2,7 @@ import { openReachMigratedDb, recordEvent } from "../lib/reach/db.mjs";
 import { syncTargets } from "../lib/reach/targets.mjs";
 import { searchPeople } from "../lib/reach/provider-people-search.mjs";
 import { fetchBravePeople } from "../lib/reach/provider-brave.mjs";
+import { fetchGooglePeople } from "../lib/reach/provider-google.mjs";
 import { upsertCompany, upsertPerson } from "../lib/reach/people.mjs";
 import { queueDaily } from "../lib/reach/queue.mjs";
 
@@ -41,6 +42,12 @@ export async function run(cfg, { emit = () => {}, jobs, fetchImpl, cooldown = ne
       try {
         if (cfg.enrichment.braveKey && !cooldown.has("brave")) {
           await fetchBravePeople(db, cfg, { company: c.name, fetchImpl, cooldown });
+        }
+      } catch { /* provider failure never blocks the batch */ }
+      // Google CSE syndication path — free 100/day; quota-tracked per month.
+      try {
+        if (cfg.enrichment.googleKey && cfg.enrichment.googleCx && !cooldown.has("google")) {
+          await fetchGooglePeople(db, cfg, { company: c.name, fetchImpl, cooldown });
         }
       } catch { /* provider failure never blocks the batch */ }
     }

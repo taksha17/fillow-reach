@@ -43,7 +43,7 @@ sent until you change that yourself in your profile.
 | **Your existing network** | LinkedIn → Settings → Get a copy of your data → export, then `node bin/reach.mjs import Connections.csv --yes` | Marks everyone you already know as connected so you never invite them. |
 | **New people** | UI → **Add people** tab: paste a LinkedIn search results page → Preview → Save. Or `reach import --paste`. | This is how new prospects enter the list. |
 | **Public team pages** | UI → **Add people** tab: paste a company Team/About URL → Fetch team page. | Robots-aware; sites that refuse are skipped cleanly. |
-| **Auto-search (optional)** | Put `BRAVE_API_KEY=…` in `.env` (free 2k/mo at brave.com/search/api), then just press **Find people to invite** — each run searches LinkedIn's public index per target company | No browser, no LinkedIn session, no key'd provider needed. Hunter/Apollo keys work the same way when you have them. |
+| **Auto-search (optional)** | Get a Google key + Custom Search ID (see **Setup → Google CSE** below), set `GOOGLE_CSE_KEY` + `GOOGLE_CSE_ID` in `.env`, then just press **Find people to invite** — each run searches Google's index for LinkedIn profiles at your target companies | No browser, no LinkedIn session. Brave (`BRAVE_API_KEY`) or Hunter/Apollo keys work the same way when you have them. |
 
 ## 2. The daily loop
 
@@ -112,3 +112,27 @@ node bin/reach.mjs forget N     # erase person N and their data
 - A recruiter at a target company with no job-title overlap scores 65 —
   below the 70 bar and stays unqueued. That's the scoring gate working, not a
   bug; queue people whose titles actually relate to your target roles.
+
+## Setup: Google CSE (free auto-search keys)
+
+1. **Google Cloud** (https://console.cloud.google.com) → create or pick a project.
+2. **APIs & Services → Library** → enable **Custom Search API**.
+3. **APIs & Services → Credentials** → **Create credentials → API key** → copy it.
+   (Optionally restrict it to the Custom Search API for safety.)
+4. **Programmable Search Engine** (https://programmablesearchengine.google.com) →
+   **Add** → name it anything → "Search the entire web" ON → Create → open the
+   engine → copy the **Search engine ID (cx)**.
+5. Put both in `fillow-reach/.env`:
+
+```
+GOOGLE_CSE_KEY=<your API key>
+GOOGLE_CSE_ID=<your cx id>
+```
+
+6. Restart the console. The button **Find people to invite** now pulls
+   recruiters for each of your target companies automatically —
+   ~100 searches/day on the free tier, quota-tracked monthly at 90 by default.
+
+The tool never touches LinkedIn or your account; Google answers the query
+`site:linkedin.com/in`<company>`"recruiter"` from its public index, and only
+the results' public profile URLs/titles are stored.

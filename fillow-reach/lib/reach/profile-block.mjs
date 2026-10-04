@@ -118,7 +118,7 @@ export function buildReachBlockYaml(src) {
     optout_line: "${r.email.optout_line}"
   enrichment:
     order: ${flowList(r.enrichment.order)}          # pattern = free built-in step
-    monthly_quota: { hunter: ${r.enrichment.monthly_quota.hunter}, apollo: ${r.enrichment.monthly_quota.apollo} }   # 0 = provider disabled; set from YOUR plan
+    monthly_quota: { hunter: ${r.enrichment.monthly_quota.hunter}, apollo: ${r.enrichment.monthly_quota.apollo} }   # 0 = provider disabled; set from YOUR plan; google stays at its free-tier floor unless you raise it
   health: { min_acceptance: ${r.health.min_acceptance}, max_bounce: ${r.health.max_bounce} }
   retention_days: ${r.retention_days}
   report: { time: "${r.report.time}", timezone: "${r.report.timezone}", attach_resumes: ${r.report.attach_resumes} }

@@ -30,7 +30,7 @@ reach:
     optout_line: "If you'd rather not hear from me, reply 'stop' and I won't write again."
   enrichment:
     order: [pattern, hunter, apollo]          # pattern = free built-in step
-    monthly_quota: { hunter: 0, apollo: 0 }   # 0 = provider disabled; set from YOUR plan
+    monthly_quota: { hunter: 0, apollo: 0 }   # 0 = provider disabled; set from YOUR plan; google stays at its free-tier floor unless you raise it
   health: { min_acceptance: 0.25, max_bounce: 0.03 }
   retention_days: 180
   report: { time: "18:30", timezone: "America/Chicago", attach_resumes: true }

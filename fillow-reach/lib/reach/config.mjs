@@ -295,6 +295,9 @@ export function loadReachConfig({ profileFile, envFile, dataDir } = {}) {
       hunterKey: envLookup("HUNTER_API_KEY"),
       apolloKey: envLookup("APOLLO_API_KEY"),
       braveKey: envLookup("BRAVE_API_KEY"),
+      googleKey: envLookup("GOOGLE_CSE_KEY"),
+      googleCx: envLookup("GOOGLE_CSE_ID"),
+      googleQuota: merged.enrichment.monthly_quota.google ?? 90,
     },
     health: {
       minAcceptance: merged.health.min_acceptance,
