@@ -29,7 +29,7 @@ Or run today's full cycle from the terminal (same path the console button uses):
 
 ```bash
 node bin/reach.mjs run        # prospect → contacts → drafts → JSONL
-# schedule it (example: 8:30 local, practice mode still blocks sends)
+# Unattended cron uses Google CSE (GOOGLE_CSE_KEY + GOOGLE_CSE_ID), never bsk.
 # 30 8 * * * cd /path/to/fillow-reach/fillow-reach && node bin/reach.mjs run
 ```
 

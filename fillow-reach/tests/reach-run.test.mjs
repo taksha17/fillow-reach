@@ -94,3 +94,11 @@ test("6. help lists reach run", async () => {
   const { out } = await cli([], fx);
   assert.match(out, /reach run\b/);
 });
+
+test("7. reach run without CSE keys reports people search skipped (cron path, not bsk)", async () => {
+  const fx = fixture();
+  const { code, out } = await cli(["run"], fx);
+  assert.equal(code, 0, out);
+  assert.match(out, /people search skipped/);
+  assert.match(out, /GOOGLE_CSE_KEY/);
+});

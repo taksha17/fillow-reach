@@ -141,10 +141,19 @@ GOOGLE_CSE_KEY=<your API key>
 GOOGLE_CSE_ID=<your cx id>
 ```
 
-6. Restart the console. The button **Find people to invite** now pulls
-   recruiters for each of your target companies automatically —
-   ~100 searches/day on the free tier, quota-tracked monthly at 90 by default.
+6. Restart the console, or schedule the unattended job (no browser, no bsk):
 
-The tool never touches LinkedIn or your account; Google answers the query
-`site:linkedin.com/in`<company>`"recruiter"` from its public index, and only
-the results' public profile URLs/titles are stored.
+```
+# crontab — 8:30 local; dry_run still blocks sends
+30 8 * * * cd /path/to/fillow-reach/fillow-reach && node bin/reach.mjs run
+```
+
+`reach run` searches Google's public index (`site:linkedin.com/in "recruiter" "company"`)
+for up to 15 companies per day (the invite cap), stores public profile URLs/titles,
+queues matches, drafts, and writes JSONL. It never opens LinkedIn.
+
+**Fetch from my LinkedIn** in the console is the interactive path (bsk, your
+logged-in browser). That cannot run from cron.
+
+The tool never touches LinkedIn or your account on the cron path; Google answers
+the query from its public index.

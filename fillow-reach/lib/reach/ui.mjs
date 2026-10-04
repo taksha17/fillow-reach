@@ -235,7 +235,7 @@ export function consolePageHtml(token) {
   </section>
 
   <section id="tab-import">
-    <p class="muted"><strong>Fetch from my LinkedIn</strong> — reads a people search in an isolated, logged-in browser window (read-only) and adds what it finds. Leave company empty to fetch for your top job targets.</p>
+    <p class="muted"><strong>Fetch from my LinkedIn</strong> — interactive only: needs your logged-in browser (bsk). It cannot run from cron. For a daily unattended job, set <code>GOOGLE_CSE_KEY</code> + <code>GOOGLE_CSE_ID</code> and schedule <code>reach run</code> — that path never opens a browser.</p>
     <div class="actions">
       <input id="fetch-company" placeholder="company (empty = top target companies)" style="width:auto; flex:1">
       <input id="fetch-keywords" placeholder="recruiter" style="width:10rem">
@@ -444,7 +444,7 @@ function runFlash(agent, r) {
   if (agent === "prospect" && r.stats) {
     if (r.stats.queued > 0) return "Added " + r.stats.queued + " " + (r.stats.queued === 1 ? "person" : "people") + " to \u201cInvites to send\u201d";
     if (r.stats.targets > 0 && STATE && STATE.people.length === 0) {
-      return "No one to invite yet — your people list is empty. Open \u201cAdd people\u201d and press \u201cFetch from my LinkedIn\u201d (logged-in browser, read-only), then press this again.";
+      return "No one to invite yet. For a one-off fetch: Add people \u2192 Fetch from my LinkedIn. For cron: set GOOGLE_CSE_KEY + GOOGLE_CSE_ID, then this button (and reach run) searches Google's index — no browser.";
     }
     if (r.stats.targets > 0) return "No new invites — everyone currently on your list is already invited, blocked, or not relevant enough yet.";
     return "No job targets found — add a jobs.tsv to data/ so the tool knows which companies matter to you.";
@@ -559,7 +559,7 @@ export function startReachUi(reachCfg, { port = 4181, host = "127.0.0.1", fetchI
   async function runAgent(agent) {
     if (agent === "prospect") {
       const r = await runProspect(reachCfg, { emit: () => {} });
-      return { agent, stats: { targets: r.targets, queued: r.queued, skipped: r.skipped } };
+      return { agent, stats: { targets: r.targets, queued: r.queued, skipped: r.skipped, discovery: r.discovery } };
     }
     if (agent === "outreach") {
       const r = await runOutreach(reachCfg, { compose: true, send: false, emit: () => {} });

@@ -207,6 +207,11 @@ async function prospectCmd(_args, ctx) {
   const { cfg, out } = ctx;
   const res = await runProspect(cfg, { emit: () => {} });
   out(`targets synced: ${res.targets} · invites queued: ${res.queued}${res.skipped ? ` · held back: ${res.skipped}` : ""}`);
+  if (res.discovery?.reason === "no_key") {
+    out("people search skipped — set GOOGLE_CSE_KEY and GOOGLE_CSE_ID for cron (bsk is interactive-only)");
+  } else if (res.discovery?.searched) {
+    out(`people search: ${res.discovery.provider} · searched ${res.discovery.searched} · imported ${res.discovery.imported}`);
+  }
   return 0;
 }
 
@@ -375,6 +380,11 @@ async function runCycleCmd(args, ctx) {
   const c = stats.contacts ?? {};
   const o = stats.outreach ?? {};
   out(`run: targets ${p.targets ?? 0} · queued ${p.queued ?? 0} · accepted ${c.accepted ?? 0} · drafted ${o.composed ?? 0} (${o.grounded ?? 0} grounded)`);
+  if (p.discovery?.reason === "no_key") {
+    out("people search skipped — set GOOGLE_CSE_KEY and GOOGLE_CSE_ID for unattended/cron fetch (bsk LinkedIn fetch is interactive-only)");
+  } else if (p.discovery?.searched) {
+    out(`people search: ${p.discovery.provider} · ${p.discovery.searched} compan${p.discovery.searched === 1 ? "y" : "ies"} · imported ${p.discovery.imported}`);
+  }
   if (stats.jsonl) out(`jsonl: ${stats.jsonl.written} event(s) → ${stats.jsonl.path}`);
   if (stats.report?.status === "built") out(`report built for ${stats.report.date} (not emailed)`);
   if (stats.report?.status === "sent") out(`report emailed for ${stats.report.date}`);

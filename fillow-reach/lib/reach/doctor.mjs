@@ -135,6 +135,22 @@ export async function collectDoctorChecks({ profileFile, envFile, dataDir, skipM
     const present = Boolean(envLookup(key));
     push(true, label, present ? "set" : "provider disabled — quota 0", !present);
   }
+  const googleSet = Boolean(envLookup("GOOGLE_CSE_KEY") && envLookup("GOOGLE_CSE_ID"));
+  push(
+    true,
+    "google cse",
+    googleSet
+      ? "set — unattended/cron people search (no browser)"
+      : "unset — cron cannot fetch people; set GOOGLE_CSE_KEY + GOOGLE_CSE_ID (free) or Fetch from my LinkedIn in the console",
+    !googleSet,
+  );
+  const braveSet = Boolean(envLookup("BRAVE_API_KEY"));
+  push(
+    true,
+    "brave",
+    braveSet ? "set — fallback people search if Google CSE is unset" : "unset",
+    !braveSet && !googleSet,
+  );
 
   // 7: IMAP login probe — the only network call doctor ever makes
   if (skipMail || !mailConfigured) {
