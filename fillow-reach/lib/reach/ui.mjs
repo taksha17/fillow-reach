@@ -62,14 +62,40 @@ function personRowHtml(person, events) {
     `<li><code>${escapeHtml(e.ts)}</code> ${escapeHtml(e.action)} <small>${escapeHtml(e.agent)} · ${escapeHtml(e.entity ?? "")}</small></li>`,
   ).join("") || "<li>none</li>";
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>${escapeHtml(person?.full_name)} — fillow Reach</title></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(person?.full_name)} — fillow Reach</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,560&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #100f0c; --panel: #181612; --ink: #f4efe6; --mute: #9c9488;
+    --line: #2a261f; --gold: #e0a14a; --moss: #7dba7a; --rose: #d46a5c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body { min-height: 100vh; font: 15px/1.45 "IBM Plex Sans", ui-sans-serif, sans-serif; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 28px 64px; }
+  a { color: var(--gold); text-decoration: underline; text-underline-offset: 3px; }
+  h1.mark { margin: 0; font-family: Fraunces, Georgia, serif; font-style: italic; font-size: 2rem; font-weight: 560; letter-spacing: -.03em; }
+  h2 { font-family: Fraunces, Georgia, serif; font-style: italic; font-weight: 560; font-size: 1.3rem; }
+  .sub { margin: 4px 0 0; color: var(--mute); }
+  ul.timeline { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+  ul.timeline li { padding: .55rem 0 .55rem .75rem; border-bottom: 1px solid var(--line); border-left: 2px solid var(--line); }
+  code { color: var(--mute); font-size: .92em; }
+  small { color: var(--mute); }
+  @media (max-width: 800px) { .wrap { padding: 20px 16px 48px; } }
+</style>
+</head>
 <body>
+<div class="wrap">
   <p><a href="/">← console</a></p>
-  <h1>${escapeHtml(person?.full_name ?? "person")}</h1>
-  <p>${escapeHtml(person?.title ?? "")} @ ${escapeHtml(person?.company ?? "")} · ${escapeHtml(person?.lifecycle ?? "")}</p>
+  <h1 class="mark">${escapeHtml(person?.full_name ?? "person")}</h1>
+  <p class="sub">${escapeHtml(person?.title ?? "")} @ ${escapeHtml(person?.company ?? "")} · ${escapeHtml(person?.lifecycle ?? "")}</p>
   ${person?.linkedin_url ? `<p><a href="${escapeHtml(profileHref(person.linkedin_url))}" target="_blank" rel="noopener">LinkedIn profile</a></p>` : ""}
   <h2>Timeline</h2>
-  <ul>${rows}</ul>
+  <ul class="timeline">${rows}</ul>
+</div>
 </body></html>`;
 }
 
@@ -81,57 +107,76 @@ export function consolePageHtml(token) {
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>fillow Reach — console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,560&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
 <style>
-  :root { color-scheme: light dark; }
+  :root {
+    --bg: #100f0c; --panel: #181612; --ink: #f4efe6; --mute: #9c9488;
+    --line: #2a261f; --gold: #e0a14a; --moss: #7dba7a; --rose: #d46a5c;
+  }
   * { box-sizing: border-box; }
-  body { font-family: system-ui, sans-serif; margin: 0; background: #f4f5f7; color: #16171a; }
-  @media (prefers-color-scheme: dark) { body { background: #14161a; color: #e6e7ea; } }
-  header { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; padding: .8rem 1rem; background: #1f2937; color: #fff; }
-  header h1 { font-size: 1.1rem; margin: 0; margin-right: .75rem; }
-  .badge { padding: .15rem .5rem; border-radius: 999px; font-size: .75rem; font-weight: 600; }
-  .badge.dry { background: #f59e0b; color: #201500; }
-  .badge.live { background: #dc2626; color: #fff; }
-  .badge.paused { background: #7c3aed; color: #fff; }
-  .badge.busy { background: #2563eb; color: #fff; }
-  nav { display: flex; flex-wrap: wrap; gap: .25rem; padding: .5rem 1rem 0; }
-  nav button { border: 1px solid #c8ccd4; background: #fff; padding: .35rem .8rem; border-radius: .5rem .5rem 0 0; cursor: pointer; font-size: .85rem; }
-  nav button.on { background: #2563eb; color: #fff; border-color: #2563eb; }
-  @media (prefers-color-scheme: dark) { nav button { background: #1f2329; color: #e6e7ea; border-color: #333; } nav button.on { background: #2563eb; } }
-  main { padding: 1rem; }
-  section { display: none; background: #fff; border: 1px solid #d5d9e0; border-radius: .5rem; padding: 1rem; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body { min-height: 100vh; font: 15px/1.45 "IBM Plex Sans", ui-sans-serif, sans-serif; }
+  a { color: inherit; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 28px 64px; }
+  header.top { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; padding-bottom: 22px; }
+  header.top h1.mark { margin: 0; margin-right: .75rem; font-family: Fraunces, Georgia, serif; font-style: italic; font-size: 2rem; font-weight: 560; letter-spacing: -.03em; }
+  .badge { padding: .15rem .6rem; border: 1px solid var(--line); border-radius: 999px; font-size: .68rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+  .badge.dry { color: var(--gold); border-color: var(--gold); }
+  .badge.live { color: var(--moss); border-color: var(--moss); }
+  .badge.paused { color: var(--rose); border-color: var(--rose); }
+  .badge.busy { color: var(--gold); }
+  nav.pipe { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0; border: 1px solid var(--line); background: var(--panel); }
+  nav.pipe button { position: relative; padding: 12px 10px 13px; border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--mute); font: 600 .82rem/1.2 "IBM Plex Sans", sans-serif; cursor: pointer; }
+  nav.pipe button:last-child { border-right: 0; }
+  nav.pipe button.on { color: var(--ink); background: #1f1c16; }
+  nav.pipe button.on::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 0; height: 2px; background: var(--gold); }
+  main { padding: 0; }
+  section { display: none; background: var(--panel); border: 1px solid var(--line); border-top: 0; padding: 1rem 1.25rem; }
   section.on { display: block; }
-  @media (prefers-color-scheme: dark) { section { background: #1a1d22; border-color: #2c313a; } }
   table { width: 100%; border-collapse: collapse; font-size: .85rem; }
-  th, td { text-align: left; padding: .3rem .5rem; border-bottom: 1px solid #e3e6eb; vertical-align: top; }
+  th { text-align: left; padding: .45rem .55rem; border-bottom: 1px solid var(--line); color: var(--mute); font-size: .68rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+  td { text-align: left; padding: .45rem .55rem; border-bottom: 1px solid var(--line); vertical-align: top; }
   td.num { text-align: right; }
   .actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
-  .actions button { padding: .4rem .9rem; border-radius: .5rem; border: 1px solid #2563eb; background: #2563eb; color: #fff; cursor: pointer; font-size: .85rem; }
-  .actions button.warn { background: #7c3aed; border-color: #7c3aed; }
-  .actions button:disabled { opacity: .5; cursor: wait; }
-  textarea, input { font: inherit; padding: .4rem; border-radius: .4rem; border: 1px solid #c8ccd4; background: #fff; color: inherit; width: 100%; }
-  @media (prefers-color-scheme: dark) { textarea, input { background: #14161a; border-color: #333; } }
+  .btn-gold { background: linear-gradient(180deg, #edbb6a, var(--gold)); color: #20180a; border: 0; padding: 9px 18px; font: 600 .9rem/1 "IBM Plex Sans", sans-serif; cursor: pointer; }
+  .btn-gold:disabled { opacity: .55; cursor: wait; }
+  .btn-ghost { background: transparent; color: var(--mute); border: 1px solid var(--line); padding: 8px 14px; font: 600 .85rem/1 "IBM Plex Sans", sans-serif; cursor: pointer; }
+  .btn-ghost:hover { color: var(--ink); border-color: var(--gold); }
+  .btn-ghost:disabled { opacity: .55; cursor: wait; }
+  .btn-warn { color: var(--rose); border-color: var(--rose); }
+  .btn-warn:hover { color: var(--rose); border-color: var(--rose); background: #1f1c16; }
+  textarea, input { font: inherit; padding: 7px 9px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); width: 100%; }
+  textarea:focus, input:focus { outline: none; border-color: var(--gold); }
   textarea { min-height: 9rem; }
-  .muted { color: #6b7280; font-size: .8rem; }
-  .flash { padding: .5rem .75rem; border-radius: .5rem; margin-bottom: .75rem; font-size: .85rem; display: none; }
-  .flash.err { background: #fee2e2; color: #7f1d1d; display: block; }
-  .flash.ok { background: #d1fae5; color: #064e3b; display: block; }
-  .pill { display: inline-block; padding: 0 .4rem; border-radius: 999px; font-size: .72rem; font-weight: 600; }
-  .pill.ok { background: #d1fae5; color: #065f46; }
-  .pill.bad { background: #fee2e2; color: #991b1b; }
-  .pill.dim { background: #e5e7eb; color: #374151; }
-  pre.draft { white-space: pre-wrap; background: #f9fafb; border: 1px solid #e3e6eb; border-radius: .4rem; padding: .5rem; font-size: .8rem; }
-  @media (prefers-color-scheme: dark) { pre.draft { background: #14161a; border-color: #2c313a; } }
+  .muted { color: var(--mute); font-size: .8rem; }
+  .flash { padding: .5rem .75rem; border: 1px solid var(--line); background: var(--panel); margin-bottom: .75rem; font-size: .85rem; display: none; }
+  .flash.err { color: var(--rose); border-color: var(--rose); display: block; }
+  .flash.ok { color: var(--moss); border-color: var(--moss); display: block; }
+  .pill { display: inline-block; padding: 0 .4rem; border: 1px solid var(--line); border-radius: 999px; font-size: .72rem; font-weight: 600; }
+  .pill.ok { color: var(--moss); border-color: var(--moss); }
+  .pill.bad { color: var(--rose); border-color: var(--rose); }
+  .pill.dim { color: var(--mute); }
+  pre.draft { white-space: pre-wrap; background: var(--bg); border: 1px solid var(--line); padding: .5rem; font-size: .8rem; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 1rem 0; }
+  @media (max-width: 800px) {
+    .wrap { padding: 20px 16px 48px; }
+    nav.pipe { grid-template-columns: 1fr 1fr; }
+    nav.pipe button { border-bottom: 1px solid var(--line); }
+  }
 </style>
 </head>
 <body data-token="${token}">
-<header>
-  <h1>fillow Reach</h1>
+<div class="wrap">
+<header class="top">
+  <h1 class="mark">fillow Reach</h1>
   <span id="badge-dry" class="badge dry" title="Practice mode: nothing gets sent. To go live, change reach.dry_run to false in your profile yourself.">Practice mode</span>
   <span id="badge-paused" class="badge paused" style="display:none">PAUSED</span>
   <span id="badge-busy" class="badge busy" style="display:none">working…</span>
-  <span id="caps" class="muted" style="color:#cbd5e1"></span>
+  <span id="caps" class="muted"></span>
 </header>
-<nav id="tabs">
+<nav id="tabs" class="pipe">
   <button data-tab="status" class="on">Overview</button>
   <button data-tab="queue">Invites to send</button>
   <button data-tab="drafts">Messages to review</button>
@@ -143,11 +188,11 @@ export function consolePageHtml(token) {
 <main>
   <div id="flash" class="flash"></div>
   <div class="actions" id="actions">
-    <button data-run="prospect" title="Picks the best people to invite from the people you've added — ones who work at your target companies (max 15/day). Add people first under 'Add people'.">Find people to invite</button>
-    <button data-run="outreach" title="Writes polite draft messages for accepted connections. Nothing is sent from this console.">Write draft messages</button>
-    <button data-run="contacts" title="Reads your inbox: who accepted your invitations, bounced emails, and finds verified emails.">Check for acceptances</button>
-    <button data-run="report" title="Builds today's summary. Does not email it.">Today's summary</button>
-    <button id="toggle-pause" class="warn">Pause everything</button>
+    <button class="btn-gold" data-run="prospect" title="Picks the best people to invite from the people you've added — ones who work at your target companies (max 15/day). Add people first under 'Add people'.">Find people to invite</button>
+    <button class="btn-gold" data-run="outreach" title="Writes polite draft messages for accepted connections. Nothing is sent from this console.">Write draft messages</button>
+    <button class="btn-gold" data-run="contacts" title="Reads your inbox: who accepted your invitations, bounced emails, and finds verified emails.">Check for acceptances</button>
+    <button class="btn-gold" data-run="report" title="Builds today's summary. Does not email it.">Today's summary</button>
+    <button id="toggle-pause" class="btn-ghost btn-warn">Pause everything</button>
   </div>
 
   <section id="tab-status" class="on">
@@ -182,15 +227,16 @@ export function consolePageHtml(token) {
     <p class="muted">Paste LinkedIn search results or a company team page's text below. You'll see a preview before anything is saved.</p>
     <textarea id="paste-text" placeholder="Jane Doe — Technical Recruiter at Acme&#10;https://www.linkedin.com/in/jane-doe"></textarea>
     <div class="actions" style="margin-top:.5rem">
-      <button id="paste-preview">Preview</button>
-      <button id="paste-apply">Save these people</button>
+      <button id="paste-preview" class="btn-ghost">Preview</button>
+      <button id="paste-apply" class="btn-gold">Save these people</button>
     </div>
     <div id="paste-result"></div>
     <hr>
     <p class="muted">Never contact someone again — add their email, LinkedIn page, or whole company domain:</p>
-    <div class="actions"><input id="suppress-value" placeholder="person@company.test, linkedin.com/in/x, or company.test" style="width:auto; flex:1"><button id="suppress-go">Never contact</button></div>
+    <div class="actions"><input id="suppress-value" placeholder="person@company.test, linkedin.com/in/x, or company.test" style="width:auto; flex:1"><button id="suppress-go" class="btn-ghost btn-warn">Never contact</button></div>
   </section>
 </main>
+</div>
 <script>
 const TOKEN = document.body.dataset.token;
 const $ = (id) => document.getElementById(id);
@@ -206,7 +252,7 @@ let STATE = null;
 function td(text) { const c = document.createElement("td"); c.textContent = text ?? ""; return c; }
 function tr(cells) { const r = document.createElement("tr"); for (const c of cells) r.appendChild(c); return r; }
 function link(url, label) { const c = td(""); if (url) { const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener"; a.textContent = label || "profile"; c.appendChild(a); } return c; }
-function btn(label, fn, warn) { const c = td(""); const b = document.createElement("button"); b.textContent = label; if (warn) b.className = "warn"; b.onclick = fn; c.appendChild(b); return c; }
+function btn(label, fn, warn) { const c = td(""); const b = document.createElement("button"); b.textContent = label; b.className = "btn-ghost" + (warn ? " btn-warn" : ""); b.onclick = fn; c.appendChild(b); return c; }
 function pill(text, cls) { const c = td(""); const s = document.createElement("span"); s.className = "pill " + cls; s.textContent = text; c.appendChild(s); return c; }
 
 function renderStatus() {
@@ -290,8 +336,8 @@ function renderDrafts() {
     const bar = document.createElement("div");
     bar.className = "actions";
     if (d.status === "needs_approval") {
-      const ap = document.createElement("button"); ap.textContent = "Approve"; ap.title = "Mark this draft as good. It will only actually send when you run the send step yourself."; ap.onclick = async () => { await post("/api/draft", { messageId: d.id, decision: "approve" }); flash("draft approved", "ok"); refresh(); };
-      const rj = document.createElement("button"); rj.textContent = "Discard"; rj.className = "warn"; rj.onclick = async () => { await post("/api/draft", { messageId: d.id, decision: "reject" }); flash("draft discarded", "ok"); refresh(); };
+      const ap = document.createElement("button"); ap.className = "btn-gold"; ap.textContent = "Approve"; ap.title = "Mark this draft as good. It will only actually send when you run the send step yourself."; ap.onclick = async () => { await post("/api/draft", { messageId: d.id, decision: "approve" }); flash("draft approved", "ok"); refresh(); };
+      const rj = document.createElement("button"); rj.textContent = "Discard"; rj.className = "btn-ghost btn-warn"; rj.onclick = async () => { await post("/api/draft", { messageId: d.id, decision: "reject" }); flash("draft discarded", "ok"); refresh(); };
       bar.append(ap, rj);
     }
     card.appendChild(bar);
