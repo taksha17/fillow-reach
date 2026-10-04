@@ -143,7 +143,7 @@ export function consolePageHtml(token) {
 <main>
   <div id="flash" class="flash"></div>
   <div class="actions" id="actions">
-    <button data-run="prospect" title="Syncs your job list and finds people worth inviting. Never contacts anyone — it only builds the list (max 15/day).">Find people to invite</button>
+    <button data-run="prospect" title="Picks the best people to invite from the people you've added — ones who work at your target companies (max 15/day). Add people first under 'Add people'.">Find people to invite</button>
     <button data-run="outreach" title="Writes polite draft messages for accepted connections. Nothing is sent from this console.">Write draft messages</button>
     <button data-run="contacts" title="Reads your inbox: who accepted your invitations, bounced emails, and finds verified emails.">Check for acceptances</button>
     <button data-run="report" title="Builds today's summary. Does not email it.">Today's summary</button>
@@ -213,6 +213,26 @@ function renderStatus() {
   const d = STATE, b = $("status-body");
   b.textContent = "";
   const kv = (k, v) => tr([td(k), td(v)]);
+  if (!d.people.length) {
+    const step = (n, label, done) => {
+      const c1 = td("");
+      const s = document.createElement("span");
+      s.textContent = done ? "\u2714" : n;
+      s.style.fontWeight = "bold";
+      c1.appendChild(s);
+      const row = tr([c1, td("")]);
+      row.children[1].textContent = (done ? "" : "\u2190 do this next: ") + label;
+      if (!done) row.children[1].style.fontWeight = "600";
+      b.appendChild(row);
+    };
+    step(1, "Load your job list (data/jobs.tsv)", d.targets.length > 0);
+    step(2, "Add people — paste a LinkedIn search results page under \u201cAdd people\u201d, or import your LinkedIn Connections.csv", false);
+    step(3, "Press \u201cFind people to invite\u201d", false);
+    const gap = tr([td(""), td("")]);
+    gap.children[1].textContent = "\u2014 your details below \u2014";
+    gap.children[1].className = "muted";
+    b.appendChild(gap);
+  }
   b.appendChild(kv("Sending mode", d.dryRun ? "Practice — nothing gets sent. To go live, set reach.dry_run to false in your profile." : "LIVE — approved messages will really send"));
   b.appendChild(kv("Paused?", d.paused ? "Yes — nothing will run" : "No"));
   b.appendChild(kv("People by stage", Object.entries(d.funnel).map(([k, v]) => k + " " + v).join(" · ")));
@@ -346,13 +366,25 @@ const runDoneText = {
   report: "Today's summary is built",
 };
 
+function runFlash(agent, r) {
+  if (r.text) return r.text.slice(0, 400);
+  if (agent === "prospect" && r.stats) {
+    if (r.stats.queued > 0) return "Added " + r.stats.queued + " " + (r.stats.queued === 1 ? "person" : "people") + " to \u201cInvites to send\u201d";
+    if (r.stats.targets > 0 && STATE && STATE.people.length === 0) {
+      return "No one to invite yet — your people list is empty. Open \u201cAdd people\u201d and paste a LinkedIn search results page (or import your Connections.csv), then press this again.";
+    }
+    if (r.stats.targets > 0) return "No new invites — everyone currently on your list is already invited, blocked, or not relevant enough yet.";
+    return "No job targets found — add a jobs.tsv to data/ so the tool knows which companies matter to you.";
+  }
+  return runDoneText[agent] || "Done";
+}
+
 document.querySelectorAll("#actions button[data-run]").forEach((b) => {
   b.onclick = async () => {
     b.disabled = true;
     try {
       const r = await post("/api/run", { agent: b.dataset.run });
-      if (r.text) flash(r.text.slice(0, 400), "ok");
-      else flash(runDoneText[b.dataset.run] || "Done", "ok");
+      flash(runFlash(b.dataset.run, r), r.stats && b.dataset.run === "prospect" && r.stats.queued === 0 ? "err" : "ok");
     } catch { /* flash shown */ }
     b.disabled = false;
     refresh();
