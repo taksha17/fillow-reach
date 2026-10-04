@@ -4,6 +4,7 @@ import { searchPeople } from "../lib/reach/provider-people-search.mjs";
 import { fetchBravePeople } from "../lib/reach/provider-brave.mjs";
 import { fetchGooglePeople } from "../lib/reach/provider-google.mjs";
 import { upsertCompany, upsertPerson } from "../lib/reach/people.mjs";
+import { personaFromTitle } from "../lib/reach/import-paste.mjs";
 import { queueDaily } from "../lib/reach/queue.mjs";
 
 // R1 Prospect agent: jobs.tsv targets -> optional own-key people search ->
@@ -31,7 +32,7 @@ export async function run(cfg, { emit = () => {}, jobs, fetchImpl, cooldown = ne
             companyId: c.id,
             linkedin_url: d.linkedin_url,
             email: d.email,
-            persona: "other",
+            persona: personaFromTitle(d.title),
             source: d.source,
             agent: "prospect",
           });
