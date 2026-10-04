@@ -27,7 +27,6 @@ import { buildDailyReport, renderReportText, reportDate } from "./report.mjs";
 import { run as runProspect } from "../../agents/reach-prospect.mjs";
 import { run as runOutreach } from "../../agents/reach-outreach.mjs";
 import { run as runContacts } from "../../agents/reach-contacts.mjs";
-import { fetchLinkedInPeople } from "./linkedin-fetch.mjs";
 
 const MAX_BODY_BYTES = 1024 * 1024;
 
@@ -232,15 +231,7 @@ export function consolePageHtml(token) {
   </section>
 
   <section id="tab-import">
-    <p class="muted"><strong>Fetch from my LinkedIn</strong> — reads a people search in an isolated, logged-in browser window (read-only) and adds what it finds. Leave company empty to fetch for your top job targets.</p>
-    <div class="actions">
-      <input id="fetch-company" placeholder="company (empty = top target companies)" style="width:auto; flex:1">
-      <input id="fetch-keywords" value="recruiter" placeholder="who to look for" style="width:auto; flex:1">
-      <button id="fetch-go" class="btn-gold" title="Opens an isolated browser window on your logged-in LinkedIn, reads the results, and stops. It never writes, likes, or sends.">Fetch from my LinkedIn</button>
-    </div>
-    <div id="fetch-result"></div>
-    <hr>
-    <p class="muted">Or paste LinkedIn search results / a company team page's text below. You'll see a preview before anything is saved.</p>
+    <p class="muted">Paste LinkedIn search results or a company team page's text below. You'll see a preview before anything is saved.</p>
     <textarea id="paste-text" placeholder="Jane Doe — Technical Recruiter at Acme&#10;https://www.linkedin.com/in/jane-doe"></textarea>
     <div class="actions" style="margin-top:.5rem">
       <button id="paste-preview" class="btn-ghost">Preview</button>
@@ -288,8 +279,8 @@ function renderStatus() {
       b.appendChild(row);
     };
     step(1, "Load your job list (data/jobs.tsv)", d.targets.length > 0);
-    step(2, "Invite someone — press \u201cFetch from my LinkedIn\u201d under \u201cAdd people\u201d (one click, read-only) or paste a search page / import your Connections.csv", false);
-    step(3, "Press \u201cFind people to invite\u201d to queue the best matches", false);
+    step(2, "Add people — paste a LinkedIn search results page under \u201cAdd people\u201d, or import your LinkedIn Connections.csv", false);
+    step(3, "Press \u201cFind people to invite\u201d", false);
     const gap = tr([td(""), td("")]);
     gap.children[1].textContent = "\u2014 your details below \u2014";
     gap.children[1].className = "muted";
@@ -455,26 +446,6 @@ document.querySelectorAll("#actions button[data-run]").forEach((b) => {
 
 $("toggle-pause").onclick = async () => {
   try { await post(STATE.paused ? "/api/resume" : "/api/pause"); flash(STATE.paused ? "resumed" : "paused — nothing sends", "ok"); refresh(); } catch { }
-};
-
-$("fetch-go").onclick = async () => {
-  const btn = $("fetch-go");
-  btn.disabled = true;
-  $("fetch-result").textContent = "Working — a browser window may flash open; that's the fetch running (read-only).";
-  try {
-    const r = await post("/api/fetch", { company: $("fetch-company").value.trim() || null, keywords: $("fetch-keywords").value.trim() || "recruiter" });
-    if (r.reason === "not_logged_in") {
-      $("fetch-result").textContent = "LinkedIn asked for a login. Log into LinkedIn in your normal browser, then press this again.";
-      flash("LinkedIn isn't logged in — see the note under the button", "err");
-    } else {
-      const parts = r.results.map((x) => x.company + ": " + x.imported + (x.skipped ? " (" + x.skipped + " skipped)" : "")).join(" · ");
-      const total = "Fetched " + r.imported + (r.imported === 1 ? " person" : " people");
-      $("fetch-result").textContent = total + (parts ? " — " + parts : "") + (r.imported ? ". Now press \u201cFind people to invite\u201d up top." : ". Nothing matched — try a different company or search words.");
-      flash(total, r.imported ? "ok" : "err");
-    }
-    refresh();
-  } catch { /* flash shown */ }
-  btn.disabled = false;
 };
 
 $("paste-preview").onclick = async () => {
@@ -712,38 +683,6 @@ export function startReachUi(reachCfg, { port = 4181, host = "127.0.0.1" } = {})
             send(200, r);
           } finally {
             busy = false;
-          }
-          return;
-        }
-
-        if (u.pathname === "/api/fetch") {
-          if (busy) { send(409, { error: "a run is already in progress" }); return; }
-          busy = true;
-          const db = openReachMigratedDb(reachCfg);
-          try {
-            let companies = [];
-            const named = String(body.company ?? "").trim();
-            if (named) {
-              companies = [named];
-            } else {
-              companies = db.prepare(
-                "SELECT c.name FROM company c JOIN target_role t ON t.company_id=c.id GROUP BY c.id ORDER BY COUNT(t.id) DESC LIMIT 10",
-              ).all().map((r) => r.name);
-            }
-            if (!companies.length) { send(400, { error: "no target companies — sync a jobs.tsv first (Find people to invite) or name a company" }); return; }
-            const keywords = String(body.keywords ?? "").trim() || "recruiter";
-            const results = [];
-            let imported = 0, skipped = 0, lastReason = null;
-            for (const company of companies) {
-              const r = await fetchLinkedInPeople(db, reachCfg, { company, keywords, limit: 12 });
-              results.push({ company, ...r });
-              imported += r.imported; skipped += r.skipped;
-              if (r.reason === "not_logged_in") { lastReason = r.reason; break; }
-            }
-            send(200, { imported, skipped, reason: lastReason, results });
-          } finally {
-            busy = false;
-            db.close();
           }
           return;
         }

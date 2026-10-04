@@ -35,22 +35,14 @@ export function migrateReachDb(db, { migrationsDir = MIGRATIONS_DIR } = {}) {
     const version = Number.parseInt(file.split("_")[0], 10);
     if (have.has(version)) continue;
     const sql = readFileSync(join(dirPath, file), "utf8");
-    // A migration that must toggle connection pragmas (e.g. PRAGMA
-    // foreign_keys=OFF for a table rebuild) cannot run inside the runner's
-    // transaction. It marks `-- migration: external-transaction` and owns its
-    // own BEGIN/COMMIT and its schema_version insert.
-    if (/^--\s*migration:\s*external-transaction/m.test(sql)) {
+    db.exec("BEGIN IMMEDIATE");
+    try {
       db.exec(sql);
-    } else {
-      db.exec("BEGIN IMMEDIATE");
-      try {
-        db.exec(sql);
-        db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(version);
-        db.exec("COMMIT");
-      } catch (err) {
-        db.exec("ROLLBACK");
-        throw err;
-      }
+      db.prepare("INSERT INTO schema_version (version) VALUES (?)").run(version);
+      db.exec("COMMIT");
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
     }
     applied.push(version);
   }
