@@ -46,6 +46,7 @@ The console's main buttons, in the order you'll use them:
 ## Docs
 
 - [`docs/ONBOARDING.md`](docs/ONBOARDING.md) — complete onboarding + daily workflow
+- [`fillow-reach/docs/UI-DESIGN-SYSTEM.md`](fillow-reach/docs/UI-DESIGN-SYSTEM.md) — palette, typography, components, logo usage (shares fillow's design language)
 - `fillow-reach/fillow Reach — PRD & Data Schema.md` — product spec & data model
 - `fillow-reach/docs/plans/` — per-milestone implementation plans
 
