@@ -15,6 +15,7 @@ import { approveAllGrounded, approveDraft, listPendingApproval, preview } from "
 import { run as runOutreach } from "../../agents/reach-outreach.mjs";
 import { startReachUi } from "./ui.mjs";
 import { reportDate, buildDailyReport, renderReportText, sendDailyReport } from "./report.mjs";
+import { fetchLinkedInPeople } from "./linkedin-fetch.mjs";
 
 // Commands registered by later tasks (send/approve/report/...) append a row
 // here: { name, summary, run(args, ctx) }. ctx = { cfg, openDb, out }.
@@ -27,6 +28,7 @@ export const commands = [
   { name: "resume", summary: "remove the PAUSE kill-switch file", run: resumeCmd },
   { name: "migrate", summary: "apply pending sqlite migrations", run: migrateCmd },
   { name: "import", summary: "Connections.csv or --paste text (review-first; --yes to write)", run: importCmd },
+  { name: "fetch", summary: "fetch people from your LinkedIn (logged-in browser, read-only)", run: fetchCmd },
   { name: "prospect", summary: "sync targets + sources, build capped invite queue", run: prospectCmd },
   { name: "contacts", summary: "detect acceptances/bounces and enrich emails", run: contactsCmd },
   { name: "suppress", summary: "add email, LinkedIn URL, or domain to do-not-contact", run: suppressCmd },
@@ -153,6 +155,47 @@ async function importCmd(args, ctx) {
     return 0;
   }
   out(`imported ${r.imported}, skipped ${r.skipped} of ${r.parsed}`);
+  return 0;
+}
+
+// `reach fetch [company] [--keywords "..."] [--limit N]` — read-only people
+// fetch through the user's logged-in browser (bsk Agent Window). No company →
+// the top target companies first (cap 10 per run, one at a time).
+async function fetchCmd(args, ctx) {
+  const { cfg, out } = ctx;
+  const taken = new Set();
+  const opt = (name) => {
+    const i = args.indexOf(name);
+    if (i === -1) return undefined;
+    taken.add(i);
+    taken.add(i + 1);
+    return args[i + 1];
+  };
+  const keywords = opt("--keywords");
+  const limit = Number(opt("--limit") ?? 12);
+  args.forEach((a, i) => { if (a.startsWith("--")) taken.add(i); });
+  const named = args.filter((_, i) => !taken.has(i));
+  let companies = [];
+  if (named.length) {
+    companies = named;
+  } else {
+    const db = ctx.openDb();
+    companies = db.prepare(
+      "SELECT c.name FROM company c JOIN target_role t ON t.company_id=c.id GROUP BY c.id ORDER BY COUNT(t.id) DESC LIMIT 10",
+    ).all().map((r) => r.name);
+  }
+  if (!companies.length) { out("no target companies — sync a jobs.tsv first (reach prospect) or pass a company"); return 1; }
+  let imported = 0;
+  let skipped = 0;
+  for (const company of companies) {
+    const db = ctx.openDb();
+    const res = await fetchLinkedInPeople(db, cfg, { company, keywords: keywords ?? "recruiter", limit });
+    imported += res.imported;
+    skipped += res.skipped;
+    out(`${company}: imported ${res.imported}${res.skipped ? `, skipped ${res.skipped}` : ""}${res.reason ? `, ${res.reason}` : ""}`);
+    if (res.reason === "not_logged_in") break;
+  }
+  out(`fetched ${imported} people${skipped ? ` (${skipped} skipped)` : ""} across ${companies.length} companies`);
   return 0;
 }
 

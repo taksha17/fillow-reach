@@ -34,7 +34,7 @@ test("0. MIGRATIONS_DIR is the ./migrations/ URL of lib/reach", () => {
 test("1. migrate on fresh :memory: applies 1 migration; second run applies none", () => {
   const db = openReachDb(":memory:");
   const first = migrateReachDb(db);
-  assert.deepEqual(first, { applied: [1, 2] });
+  assert.deepEqual(first, { applied: [1, 2, 3] });
   const second = migrateReachDb(db);
   assert.deepEqual(second, { applied: [] });
   db.close();
@@ -105,7 +105,7 @@ test("5. suppression UNIQUE(kind, value) rejects duplicates", () => {
   db.close();
 });
 
-test("6. openReachDb creates missing dirs + file; migrate records schema_version 1 and 2", () => {
+test("6. openReachDb creates missing dirs + file; migrate records schema_version 1, 2 and 3", () => {
   const dir = tmpDir("reach-db-");
   const dbPath = join(dir, "sub", "dir", "reach.db");
   const db = openReachDb(dbPath);
@@ -113,7 +113,7 @@ test("6. openReachDb creates missing dirs + file; migrate records schema_version
   migrateReachDb(db);
   assert.deepEqual(
     db.prepare("SELECT version FROM schema_version ORDER BY version").all().map((r) => r.version),
-    [1, 2],
+    [1, 2, 3],
   );
   db.close();
 });
