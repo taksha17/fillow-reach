@@ -12,3 +12,8 @@ coverage/
 # Local secrets
 .env
 .env.local
+
+# Pulled local LLM artifacts (reach llm --pull)
+models/
+bin/llama-cli
+bin/llama-cli.exe

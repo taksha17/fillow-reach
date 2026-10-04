@@ -35,6 +35,13 @@ The wizard, in order:
 When it finishes, **practice mode is on** (`dry_run: true`): nothing is ever
 sent until you change that yourself in your profile.
 
+Optional: pull a **local Qwen 1.5B** model so drafts still work without Groq
+or NVIDIA keys (`~1GB` download, `~1.5GB` RAM):
+
+```bash
+node bin/reach.mjs llm --pull
+```
+
 ## 1. Give it data (three sources)
 
 | Source | How | Why it matters |
@@ -51,10 +58,13 @@ Start the console:
 
 ```bash
 node bin/reach.mjs ui        # http://127.0.0.1:4181
+# or one command for the whole day:
+node bin/reach.mjs run
 ```
 
 | Step | Button | What happens |
 |---|---|---|
+| 0 | **Run today's cycle** | Same as `reach run`: find people, check the inbox, write drafts, archive today's events. Nothing is emailed or sent from the console. |
 | 1 | **Find people to invite** | Syncs your job list, scores people (persona, job-title overlap, live target company, recency) and fills the **Invites to send** list — max 15/day, 75/week. |
 | 2 | **You send the invites** | Open each person's LinkedIn from the list, send the invite yourself, then press **I sent this**. Sending is always manual — the tool never touches your LinkedIn. |
 | 3 | **Check for acceptances** | Reads your inbox: who accepted, which emails bounced, and finds verified email addresses. |
@@ -89,6 +99,7 @@ point, everything stops for them.
 ```bash
 node bin/reach.mjs setup        # first-time wizard
 node bin/reach.mjs ui           # open the console (127.0.0.1:4181)
+node bin/reach.mjs run          # full daily cycle (prospect → contacts → drafts)
 node bin/reach.mjs status       # quick text summary of everything
 node bin/reach.mjs doctor       # is anything misconfigured?
 node bin/reach.mjs import ...   # Connections.csv or --paste text
@@ -97,6 +108,7 @@ node bin/reach.mjs contacts     # same as "Check for acceptances"
 node bin/reach.mjs outreach     # same as "Write draft messages"
 node bin/reach.mjs approve      # list drafts needing review
 node bin/reach.mjs report       # build the daily digest
+node bin/reach.mjs llm          # local Qwen status / --pull / --test
 node bin/reach.mjs pause        # stop everything
 node bin/reach.mjs resume       # ...then start again
 node bin/reach.mjs suppress X   # never contact this email/URL/domain
@@ -107,8 +119,8 @@ node bin/reach.mjs forget N     # erase person N and their data
 
 - Sending LinkedIn invites is manual by design; an optional logged-in-browser
   auto-sender exists but is off by default.
-- Public company team pages can be imported through the library API but have
-  no button in the console yet — paste is the practical path today.
+- Public company team pages: **Add people** → paste a Team/About URL → Fetch
+  team page. Sites that refuse robots are skipped cleanly.
 - A recruiter at a target company with no job-title overlap scores 65 —
   below the 70 bar and stays unqueued. That's the scoring gate working, not a
   bug; queue people whose titles actually relate to your target roles.

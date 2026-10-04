@@ -304,3 +304,27 @@ test("13. /api/fetch-page imports a public team page via injected fetchImpl", as
     stop(server);
   }
 });
+
+test("14. run action: daily executes the full cycle and reports stats", async () => {
+  const fx = fixture();
+  const { server, url, token } = await start(fx);
+  const fetch = (p, o) => globalThis.fetch(`${url}${p}`, o);
+  const post = (path, payload) => fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Reach-Token": token },
+    body: JSON.stringify(payload),
+  });
+  try {
+    const res = await post("/api/run", { agent: "daily" });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.agent, "daily");
+    assert.ok(body.stats && Array.isArray(body.stats.errors), JSON.stringify(body));
+    assert.equal(body.stats.dryRun, true);
+    assert.equal(body.stats.sent, false);
+    const { body: state } = await json(fetch, "/api/state");
+    assert.equal(state.busy, false);
+  } finally {
+    stop(server);
+  }
+});
