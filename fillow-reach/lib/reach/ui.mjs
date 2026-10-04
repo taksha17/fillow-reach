@@ -28,6 +28,7 @@ import { run as runProspect } from "../../agents/reach-prospect.mjs";
 import { run as runOutreach } from "../../agents/reach-outreach.mjs";
 import { run as runContacts } from "../../agents/reach-contacts.mjs";
 import { importPublicPage } from "./public-pages.mjs";
+import { runDailyCycle } from "./run.mjs";
 
 const MAX_BODY_BYTES = 1024 * 1024;
 
@@ -196,6 +197,7 @@ export function consolePageHtml(token) {
 <main>
   <div id="flash" class="flash"></div>
   <div class="actions" id="actions">
+    <button class="btn-gold" data-run="daily" title="Runs today's full cycle: find people to invite, check the inbox, write drafts, archive events. Nothing is emailed or sent from this console.">Run today's cycle</button>
     <button class="btn-gold" data-run="prospect" title="Picks the best people to invite from the people you've added — ones who work at your target companies (max 15/day). Add people first under 'Add people'.">Find people to invite</button>
     <button class="btn-gold" data-run="outreach" title="Writes polite draft messages for accepted connections. Nothing is sent from this console.">Write draft messages</button>
     <button class="btn-gold" data-run="contacts" title="Reads your inbox: who accepted your invitations, bounced emails, and finds verified emails.">Check for acceptances</button>
@@ -421,6 +423,7 @@ document.querySelectorAll("#tabs button").forEach((t) => {
 });
 
 const runDoneText = {
+  daily: "Today's cycle finished — review drafts under \u201cMessages to review\u201d",
   prospect: "Invite list updated",
   outreach: "Drafts written — review them under \u201cMessages to review\u201d",
   contacts: "Inbox checked — acceptances and bounces recorded",
@@ -546,6 +549,10 @@ export function startReachUi(reachCfg, { port = 4181, host = "127.0.0.1", fetchI
       } finally {
         db.close();
       }
+    }
+    if (agent === "daily") {
+      const r = await runDailyCycle(reachCfg, { send: false, emit: () => {} });
+      return { agent, stats: r, text: r.errors.length ? r.errors.map((e) => `${e.agent}: ${e.error}`).join("; ") : "" };
     }
     throw new Error(`unknown agent: ${agent}`);
   }

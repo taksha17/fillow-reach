@@ -15,6 +15,7 @@ import { approveAllGrounded, approveDraft, listPendingApproval, preview } from "
 import { run as runOutreach } from "../../agents/reach-outreach.mjs";
 import { startReachUi } from "./ui.mjs";
 import { reportDate, buildDailyReport, renderReportText, sendDailyReport } from "./report.mjs";
+import { runDailyCycle } from "./run.mjs";
 
 // Commands registered by later tasks (send/approve/report/...) append a row
 // here: { name, summary, run(args, ctx) }. ctx = { cfg, openDb, out }.
@@ -35,6 +36,7 @@ export const commands = [
   { name: "approve", summary: "review drafts (--all-grounded); M3 is review-only", run: approveCmd },
   { name: "ui", summary: "local end-to-end console on 127.0.0.1:4181", run: uiCmd },
   { name: "report", summary: "build the daily digest (--send to email it)", run: reportCmd },
+  { name: "run", summary: "full daily cycle: prospect → contacts → drafts → JSONL", run: runCycleCmd },
 ];
 
 // Planned but unregistered: shown in help so the surface is discoverable.
@@ -314,6 +316,28 @@ async function reportCmd(args, ctx) {
     out(r.status === "sent" ? `sent report ${r.date}` : `dry-run: report built, not sent (${r.date})`);
   }
   return 0;
+}
+
+async function runCycleCmd(args, ctx) {
+  const { cfg, out } = ctx;
+  const send = args.includes("--send");
+  const stats = await runDailyCycle(cfg, { send });
+  if (args.includes("--json")) {
+    out(JSON.stringify(stats));
+    return stats.errors.length ? 1 : 0;
+  }
+  const p = stats.prospect ?? {};
+  const c = stats.contacts ?? {};
+  const o = stats.outreach ?? {};
+  out(`run: targets ${p.targets ?? 0} · queued ${p.queued ?? 0} · accepted ${c.accepted ?? 0} · drafted ${o.composed ?? 0} (${o.grounded ?? 0} grounded)`);
+  if (stats.jsonl) out(`jsonl: ${stats.jsonl.written} event(s) → ${stats.jsonl.path}`);
+  if (stats.report?.status === "built") out(`report built for ${stats.report.date} (not emailed)`);
+  if (stats.report?.status === "sent") out(`report emailed for ${stats.report.date}`);
+  if (cfg.dryRun) out("DRY RUN — nothing was sent. Pass --send only after reviewing drafts AND setting dry_run: false.");
+  if (send && cfg.dryRun) out("(--send ignored while dry_run is true)");
+  for (const e of stats.errors) out(`${e.agent} failed: ${e.error}`);
+  out("review drafts: reach approve   · console: reach ui");
+  return stats.errors.length ? 1 : 0;
 }
 
 export async function runReachCli(argv, { stdout = process.stdout, ...opts } = {}) {

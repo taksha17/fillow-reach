@@ -58,7 +58,7 @@ test("1. console page renders with embedded token and pipeline tabs", async () =
   const fetch = (p, o) => globalThis.fetch(`${url}${p}`, o);
   const page = await text(fetch, "/");
   assert.equal(page.status, 200);
-  for (const marker of ["fillow Reach", "data-token", "Overview", "Invites to send", "Messages to review", "People", "Job targets", "History", "Add people", "Find people to invite", "Pause everything"]) {
+  for (const marker of ["fillow Reach", "data-token", "Overview", "Invites to send", "Messages to review", "People", "Job targets", "History", "Add people", "Find people to invite", "Pause everything", "Run today's cycle"]) {
     assert.ok(page.body.includes(marker), `missing ${marker}`);
   }
   assert.ok(token && token.length >= 16);
