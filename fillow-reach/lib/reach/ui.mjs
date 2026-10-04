@@ -9,6 +9,11 @@
 //     composes only; the live send path stays in the profile + CLI (M5 bsk).
 import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const LOGO_PATH = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "assets", "fillow_logo.png");
 
 import { openReachMigratedDb } from "./db.mjs";
 import {
@@ -62,7 +67,7 @@ function personRowHtml(person, events) {
     `<li><code>${escapeHtml(e.ts)}</code> ${escapeHtml(e.action)} <small>${escapeHtml(e.agent)} · ${escapeHtml(e.entity ?? "")}</small></li>`,
   ).join("") || "<li>none</li>";
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="/logo.png">
 <title>${escapeHtml(person?.full_name)} — fillow Reach</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -89,7 +94,7 @@ function personRowHtml(person, events) {
 </head>
 <body>
 <div class="wrap">
-  <p><a href="/">← console</a></p>
+  <p><img class="logo" src="/logo.png" alt="fillow" style="height:28px;width:28px;object-fit:contain;vertical-align:middle;margin-right:6px"><a href="/">← console</a></p>
   <h1 class="mark">${escapeHtml(person?.full_name ?? "person")}</h1>
   <p class="sub">${escapeHtml(person?.title ?? "")} @ ${escapeHtml(person?.company ?? "")} · ${escapeHtml(person?.lifecycle ?? "")}</p>
   ${person?.linkedin_url ? `<p><a href="${escapeHtml(profileHref(person.linkedin_url))}" target="_blank" rel="noopener">LinkedIn profile</a></p>` : ""}
@@ -105,7 +110,7 @@ function personRowHtml(person, events) {
 export function consolePageHtml(token) {
   return `<!doctype html>
 <html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="/logo.png">
 <title>fillow Reach — console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -120,7 +125,8 @@ export function consolePageHtml(token) {
   body { min-height: 100vh; font: 15px/1.45 "IBM Plex Sans", ui-sans-serif, sans-serif; }
   a { color: inherit; }
   .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 28px 64px; }
-  header.top { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; padding-bottom: 22px; }
+  header.top { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding-bottom: 22px; }
+  header.top img.logo { height: 38px; width: 38px; object-fit: contain; }
   header.top h1.mark { margin: 0; margin-right: .75rem; font-family: Fraunces, Georgia, serif; font-style: italic; font-size: 2rem; font-weight: 560; letter-spacing: -.03em; }
   .badge { padding: .15rem .6rem; border: 1px solid var(--line); border-radius: 999px; font-size: .68rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
   .badge.dry { color: var(--gold); border-color: var(--gold); }
@@ -170,6 +176,7 @@ export function consolePageHtml(token) {
 <body data-token="${token}">
 <div class="wrap">
 <header class="top">
+  <img class="logo" src="/logo.png" alt="fillow">
   <h1 class="mark">fillow Reach</h1>
   <span id="badge-dry" class="badge dry" title="Practice mode: nothing gets sent. To go live, change reach.dry_run to false in your profile yourself.">Practice mode</span>
   <span id="badge-paused" class="badge paused" style="display:none">PAUSED</span>
@@ -519,6 +526,23 @@ export function startReachUi(reachCfg, { port = 4181, host = "127.0.0.1" } = {})
         return;
       }
       const u = new URL(req.url || "/", `http://${host}`);
+
+      if (req.method === "GET" && u.pathname === "/logo.png") {
+        let logo;
+        try {
+          logo = readFileSync(LOGO_PATH);
+        } catch {
+          send(404, { error: "logo not found" });
+          return;
+        }
+        res.writeHead(200, {
+          "Content-Type": "image/png",
+          "Cache-Control": "public, max-age=86400",
+          "Content-Length": logo.length,
+        });
+        res.end(logo);
+        return;
+      }
 
       if (req.method === "GET" && u.pathname === "/") {
         send(200, consolePageHtml(token), "text/html; charset=utf-8");

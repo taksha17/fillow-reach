@@ -237,3 +237,34 @@ test("10. forget requires an explicit confirm flag", async () => {
   db2.close();
   stop(server);
 });
+
+test("11. GET /logo.png serves the fillow logo as a PNG image", async () => {
+  const fx = fixture();
+  const { server, url } = await start(fx);
+  try {
+    const res = await globalThis.fetch(`${url}/logo.png`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("content-type"), /^image\/png/);
+    assert.ok(res.headers.get("cache-control")?.includes("max-age"));
+    const buf = Buffer.from(await res.arrayBuffer());
+    assert.ok(buf.length > 100000, `logo too small: ${buf.length}`);
+    // PNG magic bytes
+    assert.deepEqual([...buf.subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47]);
+  } finally {
+    stop(server);
+  }
+});
+
+test("12. console page references the logo in header and favicon", async () => {
+  const fx = fixture();
+  const { server, url } = await start(fx);
+  const fetch = (p, o) => globalThis.fetch(`${url}${p}`, o);
+  try {
+    const page = await text(fetch, "/");
+    assert.equal(page.status, 200);
+    assert.ok(page.body.includes('src="/logo.png"'), "header logo <img> missing");
+    assert.ok(page.body.includes('rel="icon" href="/logo.png"'), "favicon link missing");
+  } finally {
+    stop(server);
+  }
+});
