@@ -126,28 +126,28 @@ export function consolePageHtml(token) {
 <body data-token="${token}">
 <header>
   <h1>fillow Reach</h1>
-  <span id="badge-dry" class="badge dry">DRY RUN</span>
+  <span id="badge-dry" class="badge dry" title="Practice mode: nothing gets sent. To go live, change reach.dry_run to false in your profile yourself.">Practice mode</span>
   <span id="badge-paused" class="badge paused" style="display:none">PAUSED</span>
-  <span id="badge-busy" class="badge busy" style="display:none">running…</span>
+  <span id="badge-busy" class="badge busy" style="display:none">working…</span>
   <span id="caps" class="muted" style="color:#cbd5e1"></span>
 </header>
 <nav id="tabs">
-  <button data-tab="status" class="on">Status</button>
-  <button data-tab="queue">Queue</button>
-  <button data-tab="drafts">Drafts</button>
+  <button data-tab="status" class="on">Overview</button>
+  <button data-tab="queue">Invites to send</button>
+  <button data-tab="drafts">Messages to review</button>
   <button data-tab="people">People</button>
-  <button data-tab="targets">Targets</button>
-  <button data-tab="activity">Activity</button>
-  <button data-tab="import">Import</button>
+  <button data-tab="targets">Job targets</button>
+  <button data-tab="activity">History</button>
+  <button data-tab="import">Add people</button>
 </nav>
 <main>
   <div id="flash" class="flash"></div>
   <div class="actions" id="actions">
-    <button data-run="prospect" title="sync jobs.tsv targets + build the capped invite queue">▶ run prospect</button>
-    <button data-run="outreach" title="compose drafts for eligible people (never sends)">✎ run outreach (compose)</button>
-    <button data-run="contacts" title="IMAP acceptance/bounce detection + email enrichment">✉ run contacts</button>
-    <button data-run="report" title="build the daily digest (does not email it)">▤ build report</button>
-    <button id="toggle-pause" class="warn">⏸ pause</button>
+    <button data-run="prospect" title="Syncs your job list and finds people worth inviting. Never contacts anyone — it only builds the list (max 15/day).">Find people to invite</button>
+    <button data-run="outreach" title="Writes polite draft messages for accepted connections. Nothing is sent from this console.">Write draft messages</button>
+    <button data-run="contacts" title="Reads your inbox: who accepted your invitations, bounced emails, and finds verified emails.">Check for acceptances</button>
+    <button data-run="report" title="Builds today's summary. Does not email it.">Today's summary</button>
+    <button id="toggle-pause" class="warn">Pause everything</button>
   </div>
 
   <section id="tab-status" class="on">
@@ -155,39 +155,40 @@ export function consolePageHtml(token) {
   </section>
 
   <section id="tab-queue">
-    <p class="muted">Queued invites. After you send an invite manually on LinkedIn, "mark sent" records it — this is the queue-mode workflow (bsk auto-send is a separate milestone).</p>
-    <table><thead><tr><th>#</th><th>person</th><th>title</th><th>company</th><th>score</th><th></th><th></th></tr></thead><tbody id="queue-body"></tbody></table>
+    <p class="muted">People the tool suggests inviting. Send the invite yourself on LinkedIn, then press "I sent this" so the tool records it. (Sending is always manual — the tool never touches your LinkedIn.)</p>
+    <table><thead><tr><th>#</th><th>who</th><th>their job</th><th>company</th><th>match score</th><th></th><th></th></tr></thead><tbody id="queue-body"></tbody></table>
   </section>
 
   <section id="tab-drafts">
-    <p class="muted">Every composed draft with its grounding verdict. Approve/Reject only changes local state — nothing is sent from this console.</p>
+    <p class="muted">Draft messages the tool wrote for you, with a fact-check verdict: every claim must come from your own profile and resume. Approve the good ones, discard the rest — nothing is sent from this page.</p>
     <div id="drafts-body"></div>
   </section>
 
   <section id="tab-people">
-    <table><thead><tr><th>#</th><th>person</th><th>persona</th><th>company</th><th>lifecycle</th><th></th></tr></thead><tbody id="people-body"></tbody></table>
+    <table><thead><tr><th>#</th><th>person</th><th>stage</th><th>their job</th><th></th><th></th></tr></thead><tbody id="people-body"></tbody></table>
   </section>
 
   <section id="tab-targets">
     <p class="muted" id="targets-count"></p>
-    <table><thead><tr><th>role</th><th>company</th><th>job_ref</th><th>status</th></tr></thead><tbody id="targets-body"></tbody></table>
+    <table><thead><tr><th>job</th><th>company</th><th>reference</th><th>status</th></tr></thead><tbody id="targets-body"></tbody></table>
   </section>
 
   <section id="tab-activity">
-    <table><thead><tr><th>when</th><th>agent</th><th>action</th><th>detail</th></tr></thead><tbody id="activity-body"></tbody></table>
+    <p class="muted">Everything the tool did, newest first.</p>
+    <table><thead><tr><th>when</th><th>who</th><th>what</th><th>details</th></tr></thead><tbody id="activity-body"></tbody></table>
   </section>
 
   <section id="tab-import">
-    <p class="muted">Paste LinkedIn search results or a company team page's text. Preview first, then write — review-first is enforced server-side.</p>
+    <p class="muted">Paste LinkedIn search results or a company team page's text below. You'll see a preview before anything is saved.</p>
     <textarea id="paste-text" placeholder="Jane Doe — Technical Recruiter at Acme&#10;https://www.linkedin.com/in/jane-doe"></textarea>
     <div class="actions" style="margin-top:.5rem">
-      <button id="paste-preview">preview</button>
-      <button id="paste-apply">import (write)</button>
+      <button id="paste-preview">Preview</button>
+      <button id="paste-apply">Save these people</button>
     </div>
     <div id="paste-result"></div>
     <hr>
-    <p class="muted">Suppress a contact (email, LinkedIn URL, or domain):</p>
-    <div class="actions"><input id="suppress-value" placeholder="person@company.test or linkedin.com/in/x or company.test" style="width:auto; flex:1"><button id="suppress-go">suppress</button></div>
+    <p class="muted">Never contact someone again — add their email, LinkedIn page, or whole company domain:</p>
+    <div class="actions"><input id="suppress-value" placeholder="person@company.test, linkedin.com/in/x, or company.test" style="width:auto; flex:1"><button id="suppress-go">Never contact</button></div>
   </section>
 </main>
 <script>
@@ -212,16 +213,17 @@ function renderStatus() {
   const d = STATE, b = $("status-body");
   b.textContent = "";
   const kv = (k, v) => tr([td(k), td(v)]);
-  b.appendChild(kv("mode", d.dryRun ? "DRY RUN — nothing sends until reach.dry_run flips in the profile" : "LIVE"));
-  b.appendChild(kv("kill switch", d.paused ? "PAUSED" : "off"));
-  b.appendChild(kv("funnel", Object.entries(d.funnel).map(([k, v]) => k + " " + v).join(" · ")));
-  b.appendChild(kv("today", "invites " + (d.usage.day.invite || 0) + "/" + d.limits.invitesPerDay + " · emails " + (d.usage.day.email || 0) + "/" + d.limits.emailsPerDay));
-  b.appendChild(kv("last 7d", "invites " + (d.usage.week.invite || 0) + "/" + d.limits.invitesPer7d + " · linkedin " + (d.usage.week.linkedin_message || 0) + "/" + d.limits.linkedinMessagesPer7d));
+  b.appendChild(kv("Sending mode", d.dryRun ? "Practice — nothing gets sent. To go live, set reach.dry_run to false in your profile." : "LIVE — approved messages will really send"));
+  b.appendChild(kv("Paused?", d.paused ? "Yes — nothing will run" : "No"));
+  b.appendChild(kv("People by stage", Object.entries(d.funnel).map(([k, v]) => k + " " + v).join(" · ")));
+  b.appendChild(kv("Invites used today", (d.usage.day.invite || 0) + " of " + d.limits.invitesPerDay));
+  b.appendChild(kv("Invites used this week", (d.usage.week.invite || 0) + " of " + d.limits.invitesPer7d));
+  b.appendChild(kv("Messages this week", (d.usage.week.linkedin_message || 0) + " of " + d.limits.linkedinMessagesPer7d + " LinkedIn · " + (d.usage.day.email || 0) + " of " + d.limits.emailsPerDay + " emails today"));
   const h = d.health || {};
-  b.appendChild(kv("health", (h.acceptanceRate14d == null && h.bounceRate14d == null) ? "no data yet"
-    : "acceptance " + Math.round((h.acceptanceRate14d || 0) * 100) + "% · bounce " + ((h.bounceRate14d || 0) * 100).toFixed(1) + "%"
-      + (h.emailPaused ? " · EMAIL PAUSED" : "") + (h.halfTargets ? " · targets halved" : "")));
-  b.appendChild(kv("queues", d.queue.length + " invites queued · " + d.approvals.length + " drafts awaiting approval"));
+  b.appendChild(kv("Response health", (h.acceptanceRate14d == null && h.bounceRate14d == null) ? "no data yet — appears once you have replies/bounces"
+    : Math.round((h.acceptanceRate14d || 0) * 100) + "% accept · " + ((h.bounceRate14d || 0) * 100).toFixed(1) + "% bounce"
+      + (h.emailPaused ? " — email paused (too many bounces)" : "") + (h.halfTargets ? " — invite target halved (low acceptance)" : "")));
+  b.appendChild(kv("Waiting on you", d.queue.length + " invites to send · " + d.approvals.length + " drafts to review"));
 }
 
 function renderQueue() {
@@ -234,22 +236,25 @@ function renderQueue() {
       link(r.linkedin_url ? (/^https?:\\/\\//.test(r.linkedin_url) ? r.linkedin_url : "https://" + r.linkedin_url) : "", r.full_name),
       td(r.title), td(r.company), td(String(r.relevance_score ?? "")),
       btn("open LinkedIn", () => { window.open((/^https?:\\/\\//.test(r.linkedin_url || "") ? r.linkedin_url : "https://" + (r.linkedin_url || "")), "_blank"); }),
-      btn("mark sent", async () => { await post("/api/mark-sent", { personId: r.person_id }); flash("recorded as sent", "ok"); refresh(); }),
+      btn("I sent this", async () => { await post("/api/mark-sent", { personId: r.person_id }); flash("recorded as sent", "ok"); refresh(); }),
     ]);
     b.appendChild(row);
   });
 }
 
+const friendlyStatus = { needs_approval: "awaiting your review", approved: "approved (ready to send)", cancelled: "discarded", sent: "sent", queued: "ready to send" };
+const friendlyChannel = { linkedin: "LinkedIn message", email: "email" };
+
 function renderDrafts() {
   const b = $("drafts-body");
   b.textContent = "";
-  if (!STATE.drafts.length) { b.textContent = "— none —"; return; }
+  if (!STATE.drafts.length) { b.textContent = "— nothing yet. Drafts appear here after you press \u201cWrite draft messages\u201d and someone has accepted your invite. —"; return; }
   for (const d of STATE.drafts) {
     const card = document.createElement("div");
     card.style.marginBottom = "1rem";
     const head = document.createElement("div");
-    const verdict = d.grounding_ok === 1 ? pill("grounded", "ok") : d.grounding_ok === 0 ? pill("grounding failed", "bad") : pill("unverified", "dim");
-    head.append(String(d.id) + " · " + d.full_name + " · " + d.channel + " step " + d.step + " · " + d.status + " ");
+    const verdict = d.grounding_ok === 1 ? pill("facts verified", "ok") : d.grounding_ok === 0 ? pill("needs a fact-check", "bad") : pill("not checked", "dim");
+    head.append("Draft #" + d.id + " for " + d.full_name + " · " + (friendlyChannel[d.channel] || d.channel) + (d.step === 2 ? " (follow-up)" : "") + " · " + (friendlyStatus[d.status] || d.status) + " ");
     head.appendChild(verdict);
     card.appendChild(head);
     const pre = document.createElement("pre");
@@ -265,8 +270,8 @@ function renderDrafts() {
     const bar = document.createElement("div");
     bar.className = "actions";
     if (d.status === "needs_approval") {
-      const ap = document.createElement("button"); ap.textContent = "approve"; ap.onclick = async () => { await post("/api/draft", { messageId: d.id, decision: "approve" }); flash("draft approved", "ok"); refresh(); };
-      const rj = document.createElement("button"); rj.textContent = "reject"; rj.className = "warn"; rj.onclick = async () => { await post("/api/draft", { messageId: d.id, decision: "reject" }); flash("draft cancelled", "ok"); refresh(); };
+      const ap = document.createElement("button"); ap.textContent = "Approve"; ap.title = "Mark this draft as good. It will only actually send when you run the send step yourself."; ap.onclick = async () => { await post("/api/draft", { messageId: d.id, decision: "approve" }); flash("draft approved", "ok"); refresh(); };
+      const rj = document.createElement("button"); rj.textContent = "Discard"; rj.className = "warn"; rj.onclick = async () => { await post("/api/draft", { messageId: d.id, decision: "reject" }); flash("draft discarded", "ok"); refresh(); };
       bar.append(ap, rj);
     }
     card.appendChild(bar);
@@ -285,9 +290,9 @@ function renderPeople() {
       td(p.lifecycle),
       td(""),
       td(p.do_not_contact ? "do-not-contact" : ""),
-      btn("forget", async () => {
-        if (!window.confirm("Erase " + p.full_name + " and all derived rows? This cannot be undone.")) return;
-        try { await post("/api/forget", { personId: p.id, confirm: true }); flash("forgot", "ok"); refresh(); } catch { /* flash shown */ }
+      btn("Delete", async () => {
+        if (!window.confirm("Erase " + p.full_name + " and everything the tool knows about them? This cannot be undone.")) return;
+        try { await post("/api/forget", { personId: p.id, confirm: true }); flash("deleted", "ok"); refresh(); } catch { /* flash shown */ }
       }, true),
     ]);
     row.children[3].textContent = p.title || "";
@@ -298,7 +303,7 @@ function renderPeople() {
 function renderTargets() {
   const b = $("targets-body");
   b.textContent = "";
-  $("targets-count").textContent = STATE.targets.length + " most recent target roles";
+  $("targets-count").textContent = "Jobs you're currently targeting — the tool prefers inviting people who work at these companies. Newest first.";
   STATE.targets.slice(0, 100).forEach((t) => b.appendChild(tr([td(t.title), td(t.company), td(t.job_ref), td(t.status ?? "")])));
 }
 
@@ -310,12 +315,12 @@ function renderActivity() {
 
 function render() {
   const d = STATE;
-  $("badge-dry").textContent = d.dryRun ? "DRY RUN" : "LIVE";
+  $("badge-dry").textContent = d.dryRun ? "Practice mode" : "LIVE";
   $("badge-dry").className = "badge " + (d.dryRun ? "dry" : "live");
   $("badge-paused").style.display = d.paused ? "" : "none";
   $("badge-busy").style.display = d.busy ? "" : "none";
-  $("caps").textContent = "invites " + (d.usage.day.invite || 0) + "/" + d.limits.invitesPerDay + " today";
-  $("toggle-pause").textContent = d.paused ? "▶ resume" : "⏸ pause";
+  $("caps").textContent = (d.usage.day.invite || 0) + " of " + d.limits.invitesPerDay + " invites used today";
+  $("toggle-pause").textContent = d.paused ? "Resume" : "Pause everything";
   renderStatus(); renderQueue(); renderDrafts(); renderPeople(); renderTargets(); renderActivity();
 }
 
@@ -334,13 +339,20 @@ document.querySelectorAll("#tabs button").forEach((t) => {
   };
 });
 
+const runDoneText = {
+  prospect: "Invite list updated",
+  outreach: "Drafts written — review them under \u201cMessages to review\u201d",
+  contacts: "Inbox checked — acceptances and bounces recorded",
+  report: "Today's summary is built",
+};
+
 document.querySelectorAll("#actions button[data-run]").forEach((b) => {
   b.onclick = async () => {
     b.disabled = true;
     try {
       const r = await post("/api/run", { agent: b.dataset.run });
       if (r.text) flash(r.text.slice(0, 400), "ok");
-      else flash(b.dataset.run + " done · " + JSON.stringify(r.stats || r), "ok");
+      else flash(runDoneText[b.dataset.run] || "Done", "ok");
     } catch { /* flash shown */ }
     b.disabled = false;
     refresh();
@@ -355,16 +367,16 @@ $("paste-preview").onclick = async () => {
   const text = $("paste-text").value;
   if (!text.trim()) return;
   const r = await post("/api/import-paste", { text, apply: false });
-  $("paste-result").textContent = "parsed " + r.parsed + " — preview:\\n" + r.preview.map((p) => p.full_name + " · " + (p.title || "?") + (p.company ? " @ " + p.company : "")).join("\\n");
+  $("paste-result").textContent = "Found " + r.parsed + " " + (r.parsed === 1 ? "person" : "people") + " — check them, then press \u201cSave these people\u201d:\\n" + r.preview.map((p) => p.full_name + " · " + (p.title || "?") + (p.company ? " @ " + p.company : "")).join("\\n");
 };
 
 $("paste-apply").onclick = async () => {
   const text = $("paste-text").value;
   if (!text.trim()) return;
-  if (!window.confirm("Import the pasted people into the database?")) return;
+  if (!window.confirm("Save the pasted people to your list?")) return;
   const r = await post("/api/import-paste", { text, apply: true });
-  $("paste-result").textContent = "imported " + r.imported + (r.skipped ? ", skipped " + r.skipped : "");
-  flash("imported " + r.imported, "ok");
+  $("paste-result").textContent = "Saved " + r.imported + (r.skipped ? " (" + r.skipped + " skipped — blocked or duplicates)" : "");
+  flash("saved", "ok");
   refresh();
 };
 
@@ -372,7 +384,7 @@ $("suppress-go").onclick = async () => {
   const value = $("suppress-value").value.trim();
   if (!value) return;
   await post("/api/suppress", { value });
-  flash("suppressed " + value, "ok");
+  flash("OK — they won't be contacted", "ok");
   $("suppress-value").value = "";
   refresh();
 };

@@ -52,7 +52,7 @@ test("1. empty funnel is all zeros", () => {
 
 test("2. console shell carries the pipeline tabs and the session token", () => {
   const html = consolePageHtml("tok-abc123tok-abc123");
-  for (const marker of ["fillow Reach", "data-token=\"tok-abc123tok-abc123\"", "Queue", "Drafts", "People", "Targets", "Activity", "Import", "/api/state"]) {
+  for (const marker of ["fillow Reach", "data-token=\"tok-abc123tok-abc123\"", "Overview", "Invites to send", "Messages to review", "People", "Job targets", "History", "Add people", "/api/state"]) {
     assert.ok(html.includes(marker), `missing ${marker}`);
   }
 });
