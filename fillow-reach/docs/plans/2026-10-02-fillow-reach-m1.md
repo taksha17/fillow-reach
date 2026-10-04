@@ -65,7 +65,7 @@ Hermetic test fixture (same pattern as `tests/reach-cli.test.mjs`): `mkdtemp` + 
   - `addSuppression(db, { kind, value, reason }) -> id` — kind ∈ `email|linkedin_url|domain`, reason ∈ `optout|bounce|manual|complaint`. Normalize value the same way. Event `suppressed`.
   - `insertEmailAddress(db, { person_id, email, source, confidence = null, verification = "unknown" }) -> { id, created }` — UNIQUE `(person_id, email)` upsert; set `verified_at` when `verification !== "unknown"`; event `email_stored`. If `isSuppressed` on that email or its domain → return `null`, event `suppressed_blocked`, no row.
 
-- [ ] **Step 1: Write the failing tests** in `tests/reach-people.test.mjs` (open a migrated tmp db):
+- [x] **Step 1: Write the failing tests** in `tests/reach-people.test.mjs` (open a migrated tmp db):
 
 ```js
 // 1. upsertCompany("Acme Inc") then "ACME" → same id
@@ -76,7 +76,7 @@ Hermetic test fixture (same pattern as `tests/reach-cli.test.mjs`): `mkdtemp` + 
 // 6. insertEmailAddress on a suppressed email → null, email_address count unchanged
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 ```bash
 cd fillow-reach && node --disable-warning=ExperimentalWarning --test tests/reach-people.test.mjs
@@ -84,11 +84,11 @@ cd fillow-reach && node --disable-warning=ExperimentalWarning --test tests/reach
 
 Expected: `ERR_MODULE_NOT_FOUND` for `../lib/reach/people.mjs`.
 
-- [ ] **Step 3: Implement** the signatures in `lib/reach/people.mjs`. Fuzzy name+company: `normalizePersonName` equality AND same `company_id`. Do not pull in a fuzzy library.
+- [x] **Step 3: Implement** the signatures in `lib/reach/people.mjs`. Fuzzy name+company: `normalizePersonName` equality AND same `company_id`. Do not pull in a fuzzy library.
 
-- [ ] **Step 4: Run tests — all pass.** Then run the full glob; M0 suites stay green.
+- [x] **Step 4: Run tests — all pass.** Then run the full glob; M0 suites stay green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add fillow-reach/lib/reach/people.mjs fillow-reach/tests/reach-people.test.mjs
@@ -114,7 +114,7 @@ EOF
   - `importConnectionsCsv(db, csvText, { apply = false, source = "csv_import" }) -> { parsed, imported, skipped, preview }` — `preview` is the parsed array (max 20 in CLI print). When `apply=false`, **no writes**. When `apply=true`, each row: upsert company (if company nonempty), upsertPerson with `source:'csv_import'`, `persona` from title (`/recruit|talent|sourcer/i` → `recruiter`, else `other`), then ensure `connection` row `status='already_connected'`, `accepted_via='csv_import'`, `person.lifecycle='connected'`. Optional email → `insertEmailAddress` source `manual`. `skipped` counts suppressed + missing name. Event `csv_imported` with counts.
   - CLI: `reach import <path>` reads the file; `reach import --yes <path>` sets `apply=true`. Without `--yes`, print `preview` lines and `parsed N, not written (pass --yes)`. Exit 0. Env fixtures `REACH_PROFILE_FILE` / `REACH_DATA_DIR` already honored by `runReachCli`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```js
 // 1. parse: BOM + headers "Last Name,First Name,Company,Position,URL,Email Address"
@@ -126,13 +126,13 @@ EOF
 // 5. CLI via runReachCli(["import", csvPath], fx) → exit 0, DB empty; with --yes → row present
 ```
 
-- [ ] **Step 2:** run `tests/reach-import-csv.test.mjs` — fail on missing module.
+- [x] **Step 2:** run `tests/reach-import-csv.test.mjs` — fail on missing module.
 
-- [ ] **Step 3: Implement** a small hand-rolled CSV reader (no dependency). `importCmd` in `cli.mjs` reads the last non-flag arg as path (`node:fs` `readFileSync`).
+- [x] **Step 3: Implement** a small hand-rolled CSV reader (no dependency). `importCmd` in `cli.mjs` reads the last non-flag arg as path (`node:fs` `readFileSync`).
 
-- [ ] **Step 4:** tests pass. Existing `tests/reach-cli.test.mjs` still sees `reach import` in usage (it already asserts that string).
+- [x] **Step 4:** tests pass. Existing `tests/reach-cli.test.mjs` still sees `reach import` in usage (it already asserts that string).
 
-- [ ] **Step 5: Commit** `feat(reach): Connections.csv import with review-first --yes`
+- [x] **Step 5: Commit** `feat(reach): Connections.csv import with review-first --yes`
 
 ---
 
@@ -150,7 +150,7 @@ EOF
   - `parseBounce(msg) -> { email, class: "hard"|"soft" } | null` — look for `Status: 5.` / `550` / `5.1.` → hard; `Status: 4.` / `4.2.` → soft. Extract `Final-Recipient` or `Original-Recipient` email.
   - `detectBounces(db, reachCfg, { fetcher }) -> { checked, hard, soft }` — hard: `email_address.verification='invalid'` for that email, `addSuppression({ kind:'email', value, reason:'bounce' })`, related `message.status='bounced'` if a matching out-email exists, event `bounce_hard`. Soft: event `bounce_soft` only.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```js
 // 1. unique "Ada Lovelace has accepted your invitation" + person Ada Lovelace @ X → accepted
@@ -161,9 +161,9 @@ EOF
 // 6. soft bounce 4.2.2 → no verification change, event bounce_soft
 ```
 
-- [ ] **Step 2–4:** TDD. IMAP is not called in unit tests — inject `fetcher`.
+- [x] **Step 2–4:** TDD. IMAP is not called in unit tests — inject `fetcher`.
 
-- [ ] **Step 5: Commit** `feat(reach): Gmail acceptance + bounce detectors with injectable fetcher`
+- [x] **Step 5: Commit** `feat(reach): Gmail acceptance + bounce detectors with injectable fetcher`
 
 ---
 
@@ -190,7 +190,7 @@ EOF
 
 `cooldown` is a `Set` owned by the agent run (Task 5 creates it). Tests pass a fresh `Set`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```js
 // 1. monthlyQuota.hunter 0 → skipped disabled, fetchImpl never called
@@ -200,9 +200,9 @@ EOF
 // 5. result "risky" with requireVerified true → email_address.verification === "risky"
 ```
 
-- [ ] **Step 2–4:** TDD. Do not add a network library.
+- [x] **Step 2–4:** TDD. Do not add a network library.
 
-- [ ] **Step 5: Commit** `feat(reach): Hunter finder with cache, quota, and run-scoped error skip`
+- [x] **Step 5: Commit** `feat(reach): Hunter finder with cache, quota, and run-scoped error skip`
 
 ---
 
@@ -224,7 +224,7 @@ EOF
   - CLI `suppress <value>` — kind auto: includes `@` → email; includes `linkedin.` → linkedin_url; else domain. Reason `manual`.
   - CLI `forget <person-id>` — integer id, then `forgetPerson`.
 
-- [ ] **Step 1: Write the failing tests** in `tests/reach-suppression.test.mjs`
+- [x] **Step 1: Write the failing tests** in `tests/reach-suppression.test.mjs`
 
 ```js
 // 1. PRD §13: suppressed email never enters email_address even if enrichEmail 200s a hunter hit
@@ -238,9 +238,9 @@ EOF
 
 Also extend acceptance match (Task 3) if not already: before flipping accepted, `isSuppressed` on that person → skip.
 
-- [ ] **Step 2–4:** TDD. Production IMAP fetcher: SEARCH SINCE optional; if IMAP throws, `emit` error and continue to enrichment (one failure never blocks the batch).
+- [x] **Step 2–4:** TDD. Production IMAP fetcher: SEARCH SINCE optional; if IMAP throws, `emit` error and continue to enrichment (one failure never blocks the batch).
 
-- [ ] **Step 5: Commit** `feat(reach): contacts agent, suppress/forget/purge, CLI rows on existing dispatcher`
+- [x] **Step 5: Commit** `feat(reach): contacts agent, suppress/forget/purge, CLI rows on existing dispatcher`
 
 ---
 

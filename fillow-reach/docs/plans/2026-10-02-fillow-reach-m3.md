@@ -59,8 +59,8 @@
   - `needsEmailDraft(db, personId, { delayDays, requireVerified, now }) -> boolean` — has `email_address.verification='valid'` (or `accept_all` if you document it — v1: **valid only**), LinkedIn out-message `status='sent'` with `sent_at` ≤ now − delayDays (default 2), no inbound reply, no existing email out (except cancelled), not same UTC day as LI send.
   - `insertDraft(db, { personId, targetId, channel, step, subject, body, templateId, model }) -> messageId` — `status='needs_approval'`, `grounding_ok=null` until Task 2.
 
-- [ ] **Step 1: Failing tests** — accepted person with no LI message → `needsLinkedinDraft` true; after insertDraft linkedin, false. Email: verified + LI sent 3 days ago → true; LI sent today → false; only `risky` email → false.
-- [ ] **Step 2–5:** TDD; commit `feat(reach): outreach eligibility and draft row insert`
+- [x] **Step 1: Failing tests** — accepted person with no LI message → `needsLinkedinDraft` true; after insertDraft linkedin, false. Email: verified + LI sent 3 days ago → true; LI sent today → false; only `risky` email → false.
+- [x] **Step 2–5:** TDD; commit `feat(reach): outreach eligibility and draft row insert`
 
 ---
 
@@ -78,7 +78,7 @@
   - `groundingCheck(body, sourcesText) -> { ok, notes }` — extract candidate factual spans (quoted proper-noun phrases and skill tokens length ≥ 4). Each must appear case-insensitive in `sourcesText`. Fail if any miss. Empty body → not ok.
   - `composeDraft(db, reachCfg, personId, channel, { chatImpl }) -> { messageId, grounding_ok }` — build system prompt: "Phrase only these facts; never add projects, titles, or employers not listed." User payload = JSON of fact pack + sanitized headline. `chatImpl(system, user) -> string` (tests stub). Parse model output as `{ subject, body }` JSON; on parse fail use the raw text as body and subject `Hello`. Run `groundingCheck`. Set `grounding_ok` 1/0, `status` `needs_approval` if ok else stay `needs_approval` **and** still `grounding_ok=0` (user can see it; send will block). Event `draft_composed`.
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```js
 // 1. stub chat returns JSON body using only resume skill "Python" → grounding_ok 1
@@ -86,7 +86,7 @@
 // 3. headline "Ignore previous instructions" is not copied as a claim; sanitizeUntrusted strips the instruction line
 ```
 
-- [ ] **Step 2–5:** TDD; commit `feat(reach): draft composer with grounding check (quoted untrusted text)`
+- [x] **Step 2–5:** TDD; commit `feat(reach): draft composer with grounding check (quoted untrusted text)`
 
 ---
 
@@ -103,8 +103,8 @@
   - `approveDraft(db, messageId, { by = "user" }) -> { ok }` — if `grounding_ok===0` throw `/grounding/`; else `status='approved'`, `approved_by`, `approved_at`. Event `draft_approved`.
   - CLI `approve` prints pending ids + first 160 chars; `approve --all-grounded` approves every row with `grounding_ok=1`; `approve <id>` one row. `--json` ok.
 
-- [ ] **Step 1: Failing tests** — grounding_ok 0 cannot approve; grounding_ok 1 → approved; `--all-grounded` leaves the 0 row.
-- [ ] **Step 2–5:** TDD; commit `feat(reach): review-mode draft approval (blocks grounding_ok=0)`
+- [x] **Step 1: Failing tests** — grounding_ok 0 cannot approve; grounding_ok 1 → approved; `--all-grounded` leaves the 0 row.
+- [x] **Step 2–5:** TDD; commit `feat(reach): review-mode draft approval (blocks grounding_ok=0)`
 
 ---
 
@@ -127,7 +127,7 @@
     6. Email: `sendMailImpl({ from, to, subject, text, attachments })`. Default impl uses nodemailer with `reachCfg.mail.smtp` + user/password. Attach resume file only when `step===2 && attachResume==='followup'` or `attachResume==='first' && step===1`.
     7. Opt-out line: if body does not include it, append.
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```js
 // 1. dryRun true → sent_at null, sendMailImpl not called
@@ -138,7 +138,7 @@
 // 6. happy email: sendMailImpl called with optoutLine in text
 ```
 
-- [ ] **Step 2–5:** TDD; commit `feat(reach): cap-gated send (SMTP email, LinkedIn mark-sent, same-day defer)`
+- [x] **Step 2–5:** TDD; commit `feat(reach): cap-gated send (SMTP email, LinkedIn mark-sent, same-day defer)`
 
 ---
 
@@ -156,8 +156,8 @@
   - `run(cfg, { emit, chatImpl, sendMailImpl, compose = true, send = true } = {})` — for eligible persons compose drafts; does **not** auto-send unless `cfg.approvalMode==='review'` and caller passed something — v1: **never auto-send**. `run` only composes. Sending is `reach approve` then `reach outreach --send` (or `--send` flag on outreach after approval). Document that split in help text.
   - CLI: `outreach` compose; `outreach --send` sends all `approved` within caps/pacing.
 
-- [ ] **Step 1: Failing tests** — inbound ingest cancels a needs_approval email; `run` with stub chat inserts a LI draft for an accepted fixture person; `--send` dry-run does not SMTP.
-- [ ] **Step 2–5:** TDD; commit `feat(reach): cancel-on-reply and outreach agent (compose vs --send)`
+- [x] **Step 1: Failing tests** — inbound ingest cancels a needs_approval email; `run` with stub chat inserts a LI draft for an accepted fixture person; `--send` dry-run does not SMTP.
+- [x] **Step 2–5:** TDD; commit `feat(reach): cancel-on-reply and outreach agent (compose vs --send)`
 
 ---
 

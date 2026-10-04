@@ -55,8 +55,8 @@
   - `sendLinkedinViaBsk({ url, kind: "invite"|"message", body, bskImpl }) -> { ok, pageText, pageUrl }` — `bskImpl` injectable; production wraps `bsk` CLI. Invites: navigate to profile, click Connect, **no note**. Messages: InMail/thread, paste `body`. After action, read page text; if hazard → throw after caller pauses.
   - Send integration: if `channel==='linkedin' && sendMode==='bsk'`: require ack; call bsk; on hazard `pause()` and rethrow. If `sendMode==='queue'`, keep M3 mark-sent behavior.
 
-- [ ] **Step 1: Failing tests** — queue mode never calls `bskImpl`; bsk without ack throws `/acknowledgement/`; bskImpl returns warning copy → `isPaused` true; happy path invite `bskImpl` called with `kind: "invite"` and empty body.
-- [ ] **Step 2–5:** TDD; commit `feat(reach): optional bsk LinkedIn send with ack + auto-PAUSE on warnings`
+- [x] **Step 1: Failing tests** — queue mode never calls `bskImpl`; bsk without ack throws `/acknowledgement/`; bskImpl returns warning copy → `isPaused` true; happy path invite `bskImpl` called with `kind: "invite"` and empty body.
+- [x] **Step 2–5:** TDD; commit `feat(reach): optional bsk LinkedIn send with ack + auto-PAUSE on warnings`
 
 ---
 
@@ -75,8 +75,8 @@
   - Compose path: if `autoApproveAllowed`, set `status='approved'`, `approved_by='auto'`. Event `draft_auto_approved`.
   - If a new draft has `grounding_ok=0`: event `approval_demoted` (do not rewrite yaml).
 
-- [ ] **Step 1: Failing tests** — review mode never auto; 5 clean user approvals + sample → 6th auto (rngImpl always 0.9 so not audit); grounding_ok 0 → autoApproveAllowed false even in auto; rngImpl 0.05 in sample → still needs_approval (audit).
-- [ ] **Step 2–5:** TDD; commit `feat(reach): sample/auto approval ramp with grounding demotion event`
+- [x] **Step 1: Failing tests** — review mode never auto; 5 clean user approvals + sample → 6th auto (rngImpl always 0.9 so not audit); grounding_ok 0 → autoApproveAllowed false even in auto; rngImpl 0.05 in sample → still needs_approval (audit).
+- [x] **Step 2–5:** TDD; commit `feat(reach): sample/auto approval ramp with grounding demotion event`
 
 ---
 
@@ -93,8 +93,8 @@
   - `assertSendAllowedHealthy({ db, reachCfg, action, count })` — if action `email` and `healthGuard.emailPaused`, throw `/health/ email paused`. Else `assertSendAllowed` with `{ ...reachCfg, limits: effectiveLimits(...) }`.
   - M3 `sendApproved` uses `assertSendAllowedHealthy` instead of raw `assertSendAllowed`.
 
-- [ ] **Step 1: Failing tests** — 1 accepted / 5 sent in 14d → halfTargets, invitesPerDay 4 becomes 2, third invite send throws cap; bounce rate > 5% → email throw `/health/` with invites still allowed.
-- [ ] **Step 2–5:** TDD; commit `feat(reach): apply 14d health guard to send-time caps`
+- [x] **Step 1: Failing tests** — 1 accepted / 5 sent in 14d → halfTargets, invitesPerDay 4 becomes 2, third invite send throws cap; bounce rate > 5% → email throw `/health/` with invites still allowed.
+- [x] **Step 2–5:** TDD; commit `feat(reach): apply 14d health guard to send-time caps`
 
 ---
 
@@ -107,7 +107,7 @@
 **Interfaces:**
 - Add warn rows: `send_mode=bsk` without BSK_ACK; bsk binary missing (`which bsk` / `bsk status` injectable); `approval_mode` sample/auto noted. Fail rows never for optional bsk.
 
-- [ ] **Step 1–5:** TDD; commit `feat(reach): doctor warns on bsk ack/binary and non-review approval`
+- [x] **Step 1–5:** TDD; commit `feat(reach): doctor warns on bsk ack/binary and non-review approval`
 
 ---
 

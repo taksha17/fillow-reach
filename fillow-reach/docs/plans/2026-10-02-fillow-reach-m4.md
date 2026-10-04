@@ -57,8 +57,8 @@
   - `markInviteSent(db, personId) -> void` — `connection.status='sent'`, `sent_via='manual'`, `sent_at=datetime('now')`, lifecycle `invited`, event `invite_marked_sent`.
   - CLI `ui` prints the URL; `--json` `{ url, port }`. Tests call `renderDashboardHtml` + `markInviteSent` without listen; one smoke can listen on port 0.
 
-- [ ] **Step 1: Failing tests** — empty funnel all 0; html contains "Funnel" and "0"; markInviteSent flips queued → sent_via manual; html escapes `<script>` in a person name fixture.
-- [ ] **Step 2–5:** TDD; commit `feat(reach): standalone dashboard on 127.0.0.1:4181 with mark-sent`
+- [x] **Step 1: Failing tests** — empty funnel all 0; html contains "Funnel" and "0"; markInviteSent flips queued → sent_via manual; html escapes `<script>` in a person name fixture.
+- [x] **Step 2–5:** TDD; commit `feat(reach): standalone dashboard on 127.0.0.1:4181 with mark-sent`
 
 ---
 
@@ -81,8 +81,8 @@
   - `sendDailyReport(db, reachCfg, { sendMailImpl, now, dryRun })` — insert `report` row `report_date` UNIQUE; if dryRun status `built` only; else SMTP to `reachCfg.mail.user` and `status='sent'`. Event `report_sent`.
   - CLI `report` builds and prints; `report --send` sends unless dry-run.
 
-- [ ] **Step 1: Failing tests** — fixture one LI sent today → one row; header contains `0/15` or used/cap; dryRun does not call sendMailImpl; missing pdf skipped; timezone pin: frozen now in America/Chicago.
-- [ ] **Step 2–5:** TDD; commit `feat(reach): daily report email builder and --send`
+- [x] **Step 1: Failing tests** — fixture one LI sent today → one row; header contains `0/15` or used/cap; dryRun does not call sendMailImpl; missing pdf skipped; timezone pin: frozen now in America/Chicago.
+- [x] **Step 2–5:** TDD; commit `feat(reach): daily report email builder and --send`
 
 ---
 
@@ -100,8 +100,8 @@
   - If file exists, only append ids greater than the last `id` already in the file (read last line). Never rewrite earlier lines.
   - `run` in the report agent: `buildDailyReport` + `exportEventsJsonl`.
 
-- [ ] **Step 1: Failing tests** — two events → two lines; second call with one new event → file grows by 1 line, first line bytes unchanged.
-- [ ] **Step 2–5:** TDD; commit `feat(reach): append-only nightly event_log JSONL export`
+- [x] **Step 1: Failing tests** — two events → two lines; second call with one new event → file grows by 1 line, first line bytes unchanged.
+- [x] **Step 2–5:** TDD; commit `feat(reach): append-only nightly event_log JSONL export`
 
 ---
 
